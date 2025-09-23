@@ -1,4 +1,4 @@
-javascriptimport { flatRoutes } from "@remix-run/fs-routes";
+import { flatRoutes } from "@remix-run/fs-routes";
 
 export default flatRoutes({
   appDirectory: "app",
