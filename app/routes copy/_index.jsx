@@ -1,7 +1,7 @@
 import { redirect } from "@remix-run/node";
 import { Form, useLoaderData } from "@remix-run/react";
 import { login } from "../shopify.server"; // Updated path (removed one ../level)
-import styles from "../styles/_index.module.css"; // Updated CSS import
+import styles from "./_index.module.css"; // Updated CSS import
 
 export const loader = async ({ request }) => {
   const url = new URL(request.url);
