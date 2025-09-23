@@ -61,17 +61,15 @@ export default defineConfig({
         v3_singleFetch: false,
         v3_routeConfig: true,
       },
+      // Add the server dependencies bundling here instead
+      serverBundles: ({ branch }) => {
+        return branch.some(route => route.id === "root") ? "root" : "default";
+      },
     }),
     tsconfigPaths(),
   ],
   build: {
     assetsInlineLimit: 0,
-    target: "esnext", // Use modern target for Node 22
-    rollupOptions: {
-      output: {
-        format: "es",
-      },
-    },
   },
   optimizeDeps: {
     include: ["@shopify/app-bridge-react", "@shopify/polaris"],
@@ -84,11 +82,6 @@ export default defineConfig({
       "@shopify/app-bridge-react",
     ],
   },
-  // Enable modern syntax support
-  esbuild: {
-    target: "esnext",
-    supported: {
-      "import-assertions": true,
-    },
-  },
 });
+
+// REMOVE EVERYTHING BELOW THIS LINE - it's the duplicate CommonJS config causing conflicts
