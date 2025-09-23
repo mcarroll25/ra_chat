@@ -1,0 +1,6 @@
+name = "remix"
+roles = ["frontend", "backend"]
+
+[commands]
+predev = "npx prisma generate"
+dev = "npx prisma migrate deploy && npm exec remix vite:dev"
