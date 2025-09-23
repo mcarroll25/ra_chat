@@ -1,7 +1,6 @@
 {
   "name": "shop-chat-agent",
   "private": true,
-
   "scripts": {
     "build": "npx prisma generate && remix build",
     "dev": "remix vite:dev",
