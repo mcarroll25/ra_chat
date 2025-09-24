@@ -13,7 +13,7 @@ include_config_on_deploy = true
 api_version = "2025-04"
 
 [access_scopes]
-scopes = "read_products,read_storefront_data,read_customers"
+scopes = "read_products,read_customers"
 
 [auth]
 redirect_urls = [ "https://rachat.vercel.app/auth/callback" ]
