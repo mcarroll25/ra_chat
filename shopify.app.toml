@@ -1,9 +1,9 @@
 # Learn more about configuring your app at https://shopify.dev/docs/apps/tools/cli/configuration
 
-client_id = "f83e8212add0fa582d1479e239af4950"
+client_id = "9562c7eacb5cfbd4e5a03de06d202cc2"
 name = "shop-chat-agent"
 handle = "shop-chat-agent"
-application_url = "https://shop-chat-agent.com"
+application_url = "https://rachat.vercel.app"
 embedded = true
 
 [build]
@@ -13,16 +13,15 @@ include_config_on_deploy = true
 api_version = "2025-04"
 
 [access_scopes]
-# Learn more at https://shopify.dev/docs/apps/tools/cli/configuration#access_scopes
-scopes = "customer_read_customers,customer_read_orders,customer_read_store_credit_account_transactions,customer_read_store_credit_accounts,unauthenticated_read_product_listings"
+scopes = "read_products,read_storefront_data,read_customers"
 
 [auth]
-redirect_urls = [ "https://shop-chat-agent.com/api/auth" ]
+redirect_urls = [ "https://rachat.vercel.app/auth/callback" ]
 
 [pos]
 embedded = false
 
 [mcp.customer_authentication]
 redirect_uris = [
-  "https://shop-chat-agent.com/callback"
+  "https://rachat.vercel.app/callback"
 ]
