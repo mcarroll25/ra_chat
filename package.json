@@ -21,7 +21,7 @@
   },
   "type": "module",
   "engines": {
-    "node": "^16.0 || ^20.10 || >=21.0.0"
+    "node": "20.x"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.40.0",
