@@ -1,6 +1,6 @@
 # Learn more about configuring your app at https://shopify.dev/docs/apps/tools/cli/configuration
 
-client_id = "9562c7eacb5cfbd4e5a03de06d202cc2"
+client_id = "aeb4108dc1c112b60f87a44ca26f511a"
 name = "shop-chat-agent"
 handle = "shop-chat-agent"
 application_url = "https://rachat.vercel.app"
