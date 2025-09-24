@@ -1,17 +1,19 @@
-import { vitePlugin as remix } from "@remix-run/dev";
-import { installGlobals } from "@remix-run/node";
-import { defineConfig } from "vite";
-import tsconfigPaths from "vite-tsconfig-paths";
-
-installGlobals({ nativeFetch: true });
-
-// ... your existing HOST/SHOPIFY_APP_URL logic ...
-
 export default defineConfig({
-  // ... your existing server config ...
+  server: {
+    allowedHosts: [host, "largely-liked-killdeer.ngrok-free.app"],
+    cors: {
+      preflightContinue: true,
+    },
+    port: Number(process.env.PORT || 3000),
+    hmr: hmrConfig,
+    fs: {
+      allow: ["app", "node_modules"],
+    },
+  },
   plugins: [
     remix({
-      ignoredRouteFiles: ["**/.*", "**/*.css"], // This is the key fix!
+      ignoredRouteFiles: ["**/.*", "**/*.css", "**/*.test.{js,jsx,ts,tsx}"],
+      // Remove the custom routes function entirely for now
       future: {
         v3_fetcherPersist: true,
         v3_relativeSplatPath: true,
@@ -23,5 +25,17 @@ export default defineConfig({
     }),
     tsconfigPaths(),
   ],
-  // ... rest of your config
+  build: {
+    assetsInlineLimit: 0,
+  },
+  optimizeDeps: {
+    include: ["@shopify/app-bridge-react", "@shopify/polaris"],
+  },
+  ssr: {
+    noExternal: [
+      "@shopify/shopify-app-remix",
+      "@shopify/polaris",
+      "@shopify/app-bridge-react",
+    ],
+  },
 });
