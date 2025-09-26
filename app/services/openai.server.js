@@ -118,5 +118,4 @@ export function createOpenAIService(apiKey = process.env.OPENAI_API_KEY) {
   };
 }
 
-export { createOpenAIService };
-export default createOpenAIService;
+export default { createOpenAIService };
