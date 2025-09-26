@@ -14,19 +14,22 @@ import systemPrompts from "../prompts/prompts.json";
 function convertToOpenAIFormat(messages) {
   return messages
     .filter(msg => {
-      // Filter out system messages and internal content
-      if (msg.role === 'system') return false;
-      if (typeof msg.content === 'string' && msg.content.includes('<long_conversation_reminder>')) return false;
-      if (typeof msg.content === 'string' && msg.content.includes('<')) return false;
+      // Skip messages with system reminders or XML-like content
+      if (typeof msg.content === 'string') {
+        if (msg.content.includes('<long_conversation_reminder>')) return false;
+        if (msg.content.includes('<')) return false;
+        if (msg.content.trim().startsWith('<') && msg.content.trim().endsWith('>')) return false;
+      }
       return true;
     })
     .map(msg => {
       if (Array.isArray(msg.content)) {
-        // Handle structured content - extract only text blocks, filter out tool results
+        // Handle structured content
         const textBlocks = msg.content.filter(block =>
           block.type === 'text' &&
-          !block.text?.includes('<long_conversation_reminder>') &&
-          !block.text?.includes('<')
+          block.text &&
+          !block.text.includes('<long_conversation_reminder>') &&
+          !block.text.includes('<')
         );
 
         const textContent = textBlocks
@@ -40,11 +43,12 @@ function convertToOpenAIFormat(messages) {
         };
       }
 
-      // Filter out system content from string messages
+      // Clean string content
       let content = msg.content || '';
       if (typeof content === 'string') {
-        content = content.replace(/<long_conversation_reminder>.*?<\/long_conversation_reminder>/gs, '');
-        content = content.replace(/<.*?>/gs, '');
+        // Remove system reminders and XML content
+        content = content.replace(/<long_conversation_reminder>[\s\S]*?<\/long_conversation_reminder>/g, '');
+        content = content.replace(/<[\s\S]*?<\/antml:[^>]*>/g, '');
         content = content.trim();
       }
 
@@ -53,9 +57,8 @@ function convertToOpenAIFormat(messages) {
         content: content
       };
     })
-    .filter(msg => msg.content.length > 0); // Remove empty messages
+    .filter(msg => msg.content && msg.content.length > 0);
 }
-
 
 /**
  * Creates an OpenAI service instance
@@ -112,41 +115,52 @@ export function createOpenAIService(apiKey = process.env.OPENAI_API_KEY) {
     let finalMessage = null;
 
     // Process stream
-    for await (const chunk of stream) {
-      const delta = chunk.choices[0]?.delta;
+    try {
+      for await (const chunk of stream) {
+        const delta = chunk.choices[0]?.delta;
 
-      if (delta?.content) {
-        fullContent += delta.content;
-        if (streamHandlers.onText) {
-          streamHandlers.onText(delta.content);
+        if (delta?.content) {
+          fullContent += delta.content;
+          if (streamHandlers.onText) {
+            streamHandlers.onText(delta.content);
+          }
         }
-      }
 
-      if (delta?.tool_calls) {
-        // Handle tool calls
-        for (const toolCall of delta.tool_calls) {
-          if (streamHandlers.onToolUse && toolCall.function) {
-            await streamHandlers.onToolUse({
-              type: "tool_use",
-              id: toolCall.id,
-              name: toolCall.function.name,
-              input: JSON.parse(toolCall.function.arguments || "{}")
-            });
+        if (delta?.tool_calls) {
+          // Handle tool calls
+          for (const toolCall of delta.tool_calls) {
+            if (streamHandlers.onToolUse && toolCall.function) {
+              await streamHandlers.onToolUse({
+                type: "tool_use",
+                id: toolCall.id,
+                name: toolCall.function.name,
+                input: JSON.parse(toolCall.function.arguments || "{}")
+              });
+            }
+          }
+        }
+
+        if (chunk.choices[0]?.finish_reason) {
+          finalMessage = {
+            role: "assistant",
+            content: fullContent
+          };
+
+          if (streamHandlers.onMessage) {
+            streamHandlers.onMessage(finalMessage);
           }
         }
       }
+    } catch (error) {
+          console.error('OpenAI streaming error:', error);
+          // Return a basic message instead of crashing
+          return {
+            role: "assistant",
+            content: fullContent || "I'm having trouble processing that request. Please try again.",
+            stop_reason: "end_turn"
+          };
 
-      if (chunk.choices[0]?.finish_reason) {
-        finalMessage = {
-          role: "assistant",
-          content: fullContent
-        };
-
-        if (streamHandlers.onMessage) {
-          streamHandlers.onMessage(finalMessage);
-        }
-      }
-    }
+    }}
 
     return finalMessage;
   };
