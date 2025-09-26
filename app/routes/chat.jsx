@@ -128,7 +128,7 @@ async function handleChatSession({
   stream
 }) {
   // Initialize services
-  const claudeService = createOpenAIService();
+  const openaiService = createOpenAIService();
   const toolService = createToolService();
 
   // Initialize MCP client
@@ -187,7 +187,7 @@ async function handleChatSession({
     let finalMessage = { role: 'user', content: userMessage };
 
     while (finalMessage.stop_reason !== "end_turn") {
-      finalMessage = await claudeService.streamConversation(
+      finalMessage = await openaiService.streamConversation(
         {
           messages: conversationHistory,
           promptType,
