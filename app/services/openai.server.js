@@ -7,6 +7,59 @@ import AppConfig from "./config.server";
 import systemPrompts from "../prompts/prompts.json";
 
 /**
+ * Convert Claude/database message format to OpenAI format
+ * @param {Array} messages - Messages in Claude format
+ * @returns {Array} Messages in OpenAI format
+ */
+function convertToOpenAIFormat(messages) {
+  return messages
+    .filter(msg => {
+      // Filter out system messages and internal content
+      if (msg.role === 'system') return false;
+      if (typeof msg.content === 'string' && msg.content.includes('<long_conversation_reminder>')) return false;
+      if (typeof msg.content === 'string' && msg.content.includes('<')) return false;
+      return true;
+    })
+    .map(msg => {
+      if (Array.isArray(msg.content)) {
+        // Handle structured content - extract only text blocks, filter out tool results
+        const textBlocks = msg.content.filter(block =>
+          block.type === 'text' &&
+          !block.text?.includes('<long_conversation_reminder>') &&
+          !block.text?.includes('<')
+        );
+
+        const textContent = textBlocks
+          .map(block => block.text)
+          .join('\n')
+          .trim();
+
+        return {
+          role: msg.role,
+          content: textContent || ''
+        };
+      }
+
+      // Filter out system content from string messages
+      let content = msg.content || '';
+      if (typeof content === 'string') {
+        content = content.replace(/<long_conversation_reminder>.*?<\/long_conversation_reminder>/gs, '');
+        content = content.replace(/<.*?>/gs, '');
+        content = content.trim();
+      }
+
+      return {
+        role: msg.role,
+        content: content
+      };
+    })
+    .filter(msg => msg.content.length > 0); // Remove empty messages
+}
+
+export function createOpenAIService(apiKey = process.env.OPENAI_API_KEY) {
+  // ... rest of your existing code
+
+/**
  * Creates an OpenAI service instance
  * @param {string} apiKey - OpenAI API key
  * @returns {Object} OpenAI service with methods for interacting with OpenAI API
@@ -36,12 +89,10 @@ export function createOpenAIService(apiKey = process.env.OPENAI_API_KEY) {
     const systemInstruction = getSystemPrompt(promptType);
 
     // OpenAI format: system message goes in messages array
+    const convertedMessages = convertToOpenAIFormat(messages);
     const openAIMessages = [
       { role: "system", content: systemInstruction },
-      ...messages.map(msg => ({
-        role: msg.role === "assistant" ? "assistant" : "user",
-        content: msg.content
-      }))
+      ...convertedMessages
     ];
 
     // Create stream
