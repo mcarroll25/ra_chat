@@ -1,26 +1,26 @@
 /**
- * Claude Service
- * Manages interactions with the Claude API
+ * OpenAI Service
+ * Manages interactions with the OpenAI API
  */
-import { Anthropic } from "@anthropic-ai/sdk";
+import OpenAI from "openai";
 import AppConfig from "./config.server";
 import systemPrompts from "../prompts/prompts.json";
 
 /**
- * Creates a Claude service instance
- * @param {string} apiKey - Claude API key
- * @returns {Object} Claude service with methods for interacting with Claude API
+ * Creates an OpenAI service instance
+ * @param {string} apiKey - OpenAI API key
+ * @returns {Object} OpenAI service with methods for interacting with OpenAI API
  */
-export function createClaudeService(apiKey = process.env.CLAUDE_API_KEY) {
-  // Initialize Claude client
-  const anthropic = new Anthropic({ apiKey });
+export function createOpenAIService(apiKey = process.env.OPENAI_API_KEY) {
+  // Initialize OpenAI client
+  const openai = new OpenAI({ apiKey });
 
   /**
-   * Streams a conversation with Claude
+   * Streams a conversation with OpenAI
    * @param {Object} params - Stream parameters
    * @param {Array} params.messages - Conversation history
    * @param {string} params.promptType - The type of system prompt to use
-   * @param {Array} params.tools - Available tools for Claude
+   * @param {Array} params.tools - Available tools for OpenAI
    * @param {Object} streamHandlers - Stream event handlers
    * @param {Function} streamHandlers.onText - Handles text chunks
    * @param {Function} streamHandlers.onMessage - Handles complete messages
@@ -32,39 +32,69 @@ export function createClaudeService(apiKey = process.env.CLAUDE_API_KEY) {
     promptType = AppConfig.api.defaultPromptType,
     tools
   }, streamHandlers) => {
-    // Get system prompt from configuration or use default
+    // Get system prompt and add it as first message
     const systemInstruction = getSystemPrompt(promptType);
 
+    // OpenAI format: system message goes in messages array
+    const openAIMessages = [
+      { role: "system", content: systemInstruction },
+      ...messages.map(msg => ({
+        role: msg.role === "assistant" ? "assistant" : "user",
+        content: msg.content
+      }))
+    ];
+
     // Create stream
-    const stream = await anthropic.messages.stream({
-      model: AppConfig.api.defaultModel,
-      max_tokens: AppConfig.api.maxTokens,
-      system: systemInstruction,
-      messages,
-      tools: tools && tools.length > 0 ? tools : undefined
+    const stream = await openai.chat.completions.create({
+      model: "gpt-4", // or "gpt-3.5-turbo"
+      messages: openAIMessages,
+      stream: true,
+      tools: tools && tools.length > 0 ? tools.map(tool => ({
+        type: "function",
+        function: {
+          name: tool.name,
+          description: tool.description,
+          parameters: tool.input_schema
+        }
+      })) : undefined
     });
 
-    // Set up event handlers
-    if (streamHandlers.onText) {
-      stream.on('text', streamHandlers.onText);
-    }
+    let fullContent = "";
+    let finalMessage = null;
 
-    if (streamHandlers.onMessage) {
-      stream.on('message', streamHandlers.onMessage);
-    }
+    // Process stream
+    for await (const chunk of stream) {
+      const delta = chunk.choices[0]?.delta;
 
-    if (streamHandlers.onContentBlock) {
-      stream.on('contentBlock', streamHandlers.onContentBlock);
-    }
+      if (delta?.content) {
+        fullContent += delta.content;
+        if (streamHandlers.onText) {
+          streamHandlers.onText(delta.content);
+        }
+      }
 
-    // Wait for final message
-    const finalMessage = await stream.finalMessage();
+      if (delta?.tool_calls) {
+        // Handle tool calls
+        for (const toolCall of delta.tool_calls) {
+          if (streamHandlers.onToolUse && toolCall.function) {
+            await streamHandlers.onToolUse({
+              type: "tool_use",
+              id: toolCall.id,
+              name: toolCall.function.name,
+              input: JSON.parse(toolCall.function.arguments || "{}")
+            });
+          }
+        }
+      }
 
-    // Process tool use requests
-    if (streamHandlers.onToolUse && finalMessage.content) {
-      for (const content of finalMessage.content) {
-        if (content.type === "tool_use") {
-          await streamHandlers.onToolUse(content);
+      if (chunk.choices[0]?.finish_reason) {
+        finalMessage = {
+          role: "assistant",
+          content: fullContent
+        };
+
+        if (streamHandlers.onMessage) {
+          streamHandlers.onMessage(finalMessage);
         }
       }
     }
@@ -88,6 +118,5 @@ export function createClaudeService(apiKey = process.env.CLAUDE_API_KEY) {
   };
 }
 
-export default {
-  createClaudeService
-};
+export { createOpenAIService };
+export default createOpenAIService;
