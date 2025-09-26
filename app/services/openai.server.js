@@ -11,14 +11,16 @@ import systemPrompts from "../prompts/prompts.json";
  * @param {Array} messages - Messages in Claude format
  * @returns {Array} Messages in OpenAI format
  */
+
 function convertToOpenAIFormat(messages) {
   return messages
     .filter(msg => {
       // Skip messages with system reminders or XML-like content
       if (typeof msg.content === 'string') {
-        if (msg.content.includes('<long_conversation_reminder>')) return false;
+        if (msg.content.includes('long_conversation_reminder')) return false;
+        if (msg.content.includes('Claude cares about')) return false;
+        if (msg.content.includes('Claude never starts')) return false;
         if (msg.content.includes('<')) return false;
-        if (msg.content.trim().startsWith('<') && msg.content.trim().endsWith('>')) return false;
       }
       return true;
     })
@@ -28,7 +30,8 @@ function convertToOpenAIFormat(messages) {
         const textBlocks = msg.content.filter(block =>
           block.type === 'text' &&
           block.text &&
-          !block.text.includes('<long_conversation_reminder>') &&
+          !block.text.includes('long_conversation_reminder') &&
+          !block.text.includes('Claude cares about') &&
           !block.text.includes('<')
         );
 
@@ -43,12 +46,14 @@ function convertToOpenAIFormat(messages) {
         };
       }
 
-      // Clean string content
+      // Clean string content more aggressively
       let content = msg.content || '';
       if (typeof content === 'string') {
-        // Remove system reminders and XML content
+        // Remove various system content patterns
         content = content.replace(/<long_conversation_reminder>[\s\S]*?<\/long_conversation_reminder>/g, '');
-        content = content.replace(/<[\s\S]*?<\/antml:[^>]*>/g, '');
+        content = content.replace(/Claude cares about[\s\S]*?healthy way\./g, '');
+        content = content.replace(/Claude never starts[\s\S]*?circumstances\./g, '');
+        content = content.replace(/<[\s\S]*?>/g, '');
         content = content.trim();
       }
 
@@ -160,7 +165,7 @@ export function createOpenAIService(apiKey = process.env.OPENAI_API_KEY) {
             stop_reason: "end_turn"
           };
 
-    }}
+    }
 
     return finalMessage;
   };
