@@ -56,8 +56,6 @@ function convertToOpenAIFormat(messages) {
     .filter(msg => msg.content.length > 0); // Remove empty messages
 }
 
-export function createOpenAIService(apiKey = process.env.OPENAI_API_KEY) {
-  // ... rest of your existing code
 
 /**
  * Creates an OpenAI service instance
