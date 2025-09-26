@@ -481,7 +481,7 @@
             prompt_type: promptType
           });
 
-          const streamUrl = 'https://localhost:3458/chat';
+          const streamUrl = 'https://rachat.vercel.app/chat';
           const shopId = window.shopId;
 
           const response = await fetch(streamUrl, {
@@ -590,9 +590,9 @@
             break;
 
           case 'tool_use':
-            if (data.tool_use_message) {
-              ShopAIChat.Message.addToolUse(data.tool_use_message, messagesContainer);
-            }
+          //  if (data.tool_use_message) {
+          //    ShopAIChat.Message.addToolUse(data.tool_use_message, messagesContainer);
+          //  }
             break;
 
           case 'new_message':
@@ -630,7 +630,7 @@
           messagesContainer.appendChild(loadingMessage);
 
           // Fetch history from the server
-          const historyUrl = `https://localhost:3458/chat?history=true&conversation_id=${encodeURIComponent(conversationId)}`;
+          const historyUrl = `https://rachat.vercel.app/chat/chat?history=true&conversation_id=${encodeURIComponent(conversationId)}`;
           console.log('Fetching history from:', historyUrl);
 
           const response = await fetch(historyUrl, {
@@ -779,7 +779,7 @@
           attemptCount++;
 
           try {
-            const tokenUrl = 'https://localhost:3458/auth/token-status?conversation_id=' +
+            const tokenUrl = 'https://rachat.vercel.app/chat/auth/token-status?conversation_id=' +
               encodeURIComponent(conversationId);
             const response = await fetch(tokenUrl);
 

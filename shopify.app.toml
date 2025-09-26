@@ -1,8 +1,9 @@
 # Learn more about configuring your app at https://shopify.dev/docs/apps/tools/cli/configuration
 
-client_id = "aeb4108dc1c112b60f87a44ca26f511a"
-name = "shop-chat-agent"
-handle = "shop-chat-agent"
+#client_id = "aeb4108dc1c112b60f87a44ca26f511a"
+client_id = "9562c7eacb5cfbd4e5a03de06d202cc2"
+name = "RestorAir Chat Agent"
+handle = "restorair-chat-agent-2024"  # Changed to be unique
 application_url = "https://rachat.vercel.app"
 embedded = true
 
@@ -20,8 +21,3 @@ redirect_urls = [ "https://rachat.vercel.app/auth/callback" ]
 
 [pos]
 embedded = false
-
-[mcp.customer_authentication]
-redirect_uris = [
-  "https://rachat.vercel.app/callback"
-]

@@ -22,13 +22,13 @@
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
     transition: transform 0.3s ease;
   }
-  
+
   @media (max-width: 480px) {
     .shop-ai-chat-bubble {
       width: 50px;
       height: 50px;
     }
-    
+
     .shop-ai-chat-bubble svg {
       width: 25px;
       height: 25px;
@@ -66,7 +66,7 @@
     transform: translateY(20px);
     transition: opacity 0.3s ease, transform 0.3s ease;
   }
-  
+
   /* Responsive adjustments for smaller screens */
   @media (max-width: 480px) {
     .shop-ai-chat-window {
@@ -92,7 +92,7 @@
     .shop-ai-message {
       max-width: 90%;
     }
-    
+
     /* Prevent scrolling on the main page when chat is open */
     body.shop-ai-chat-open {
       overflow: hidden;
@@ -100,7 +100,7 @@
       width: 100%;
       height: 100%;
     }
-    
+
     .shop-ai-chat-header {
       padding: 12px 16px;
       border-radius: 0;
@@ -112,18 +112,18 @@
     pointer-events: all;
     transform: translateY(0);
   }
-  
+
   @media (max-width: 480px) {
     .shop-ai-chat-window {
       transform: translateY(100%);
       z-index: 999999;
       transition: transform 0.4s ease, opacity 0.3s ease;
     }
-    
+
     .shop-ai-chat-window.active {
       transform: translateY(0);
     }
-    
+
     .shop-ai-chat-bubble {
       z-index: 1000000;
       position: relative;
@@ -170,12 +170,12 @@
     overflow-wrap: break-word;
     word-break: break-word;
   }
-  
+
   @media (max-width: 480px) {
     .shop-ai-chat-messages {
       padding: 12px 10px;
     }
-    
+
     .shop-ai-message {
       font-size: 15px;
       padding: 10px 14px;
@@ -198,7 +198,7 @@
   .shop-ai-message.assistant a:hover {
     opacity: 0.8;
   }
-  
+
   @media (max-width: 480px) {
     .shop-ai-message.assistant a,
     .shop-ai-message.user a {
@@ -208,37 +208,37 @@
       text-overflow: ellipsis;
     }
   }
-  
+
   /* List styling for assistant messages */
   .shop-ai-message.assistant ul,
   .shop-ai-message.assistant ol {
     margin: 8px 0;
     padding-left: 24px;
   }
-  
+
   .shop-ai-message.assistant li {
     margin-bottom: 6px;
   }
-  
+
   .shop-ai-message.assistant li:last-child {
     margin-bottom: 0;
   }
-  
+
   /* Nested list styling */
   .shop-ai-message.assistant li > ul,
   .shop-ai-message.assistant li > ol {
     margin-top: 6px;
   }
-  
+
   /* Paragraph styling */
   .shop-ai-message.assistant p {
     margin: 0 0 10px 0;
   }
-  
+
   .shop-ai-message.assistant p:last-child {
     margin-bottom: 0;
   }
-  
+
   /* Bold text styling */
   .shop-ai-message.assistant strong {
     font-weight: 600;
@@ -250,7 +250,7 @@
     color: white;
     border-bottom-right-radius: 4px;
   }
-  
+
   .shop-ai-message.user a {
     color: white;
     text-decoration: underline;
@@ -323,17 +323,17 @@
     flex: 1;
     padding: 12px 16px;
     border: 1px solid #e9e9e9;
-    border-radius: 24px;
+    //border-radius: 24px;
     font-size: 14px;
     outline: none;
     min-height: 24px;
   }
-  
+
   @media (max-width: 480px) {
     .shop-ai-chat-input {
       padding: 12px 10px;
     }
-    
+
     .shop-ai-chat-input input {
       padding: 10px 14px;
       font-size: 16px; /* Better for mobile input */
@@ -348,13 +348,15 @@
     background-color: #5046e4;
     color: white;
     border: none;
-    border-radius: 50%;
-    width: 40px;
+    //border-radius: 5%;
+    //width: 80px;
     height: 40px;
     display: flex;
     align-items: center;
     justify-content: center;
     cursor: pointer;
+    flex-shrink: 0; /* Add this to prevent shrinking */
+  position: relative; /* Add this for better positioning control */
   }
 
   .shop-ai-typing-indicator {
@@ -408,20 +410,20 @@
     border-bottom: 1px solid #eaeaea;
     padding: 10px 0;
   }
-  
+
   /* Product Header Styling */
   .shop-ai-product-header {
     padding: 0 0 10px 5px;
     margin-bottom: 10px;
   }
-  
+
   .shop-ai-product-header h4 {
     font-size: 15px;
     font-weight: 600;
     color: #333;
     margin: 0;
   }
-  
+
   /* Product Grid Styling */
   .shop-ai-product-grid {
     display: flex;
@@ -435,17 +437,17 @@
     background-color: transparent;
     -webkit-overflow-scrolling: touch;
   }
-  
+
   /* Hide scrollbar in webkit browsers */
   .shop-ai-product-grid::-webkit-scrollbar {
     height: 6px;
   }
-  
+
   .shop-ai-product-grid::-webkit-scrollbar-thumb {
     background-color: rgba(0, 0, 0, 0.2);
     border-radius: 3px;
   }
-  
+
   /* Product Card Styling */
   .shop-ai-product-card {
     background: white;
@@ -460,12 +462,12 @@
     border: 1px solid #eaeaea;
     position: relative;
   }
-  
+
   .shop-ai-product-card:hover {
     transform: translateY(-3px);
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
   }
-  
+
   /* Product Image Styling */
   .shop-ai-product-image {
     height: 140px;
@@ -476,18 +478,18 @@
     align-items: center;
     justify-content: center;
   }
-  
+
   .shop-ai-product-image img {
     width: 100%;
     height: 100%;
     object-fit: cover;
   }
-  
+
   /* Product Info Styling */
   .shop-ai-product-info {
     padding: 10px;
   }
-  
+
   .shop-ai-product-title {
     margin: 0 0 5px 0;
     font-size: 14px;
@@ -498,14 +500,14 @@
     overflow: hidden;
     text-overflow: ellipsis;
   }
-  
+
   .shop-ai-product-price {
     margin: 0 0 10px 0;
     font-size: 14px;
     font-weight: 600;
     color: #5046e4;
   }
-  
+
   /* Add to Cart Button Styling */
   .shop-ai-add-to-cart {
     width: 100%;
@@ -519,11 +521,11 @@
     cursor: pointer;
     transition: background-color 0.2s;
   }
-  
+
   .shop-ai-add-to-cart:hover {
     background-color: #3f36c0;
   }
-  
+
   /* Responsive adjustments for small screens */
   @media (max-width: 480px) {
     .shop-ai-product-grid {
@@ -533,7 +535,7 @@
       overflow-y: auto;
       min-height: auto;
     }
-    
+
     .shop-ai-product-card {
       min-width: 100%;
       max-width: 100%;
@@ -541,18 +543,18 @@
       align-items: center;
       margin-bottom: 8px;
     }
-    
+
     .shop-ai-product-image {
       width: 80px;
       height: 80px;
       flex-shrink: 0;
     }
-    
+
     .shop-ai-product-info {
       flex: 1;
       padding: 5px 10px;
     }
-    
+
     .shop-ai-product-title {
       white-space: normal;
       display: -webkit-box;
@@ -561,40 +563,40 @@
       overflow: hidden;
       text-overflow: ellipsis;
     }
-    
+
     .shop-ai-add-to-cart {
       padding: 6px 0;
       font-size: 12px;
     }
-    
+
     .shop-ai-product-section {
       margin: 10px 0;
       padding: 5px 0;
     }
   }
-  
+
   /* Even smaller screens */
   @media (max-width: 380px) {
     .shop-ai-chat-input input {
       padding: 8px 12px;
     }
-    
+
     .shop-ai-chat-send {
       width: 36px;
       height: 36px;
     }
-    
+
     .shop-ai-message {
       max-width: 95%;
       font-size: 14px;
       padding: 10px 12px;
     }
-    
+
     .shop-ai-chat-header {
       padding: 10px;
     }
   }
-  
+
   @keyframes typing {
     0% {
       opacity: 0.4;
