@@ -200,7 +200,7 @@ async function handleChatSession({
       {
         messages: conversationHistory,
         promptType,
-        tools: undefined //mcpClient.tools
+        tools: mcpClient.tools
       },
       {
         // Handle text chunks

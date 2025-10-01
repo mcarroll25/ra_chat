@@ -100,6 +100,7 @@ export function createOpenAIService(apiKey = process.env.OPENAI_API_KEY) {
 
     let fullContent = "";
     let finalMessage = null;
+    let toolCallsBuffer = {}; // Buffer for accumulating tool call arguments
 
     try {
       // Create stream
@@ -107,19 +108,21 @@ export function createOpenAIService(apiKey = process.env.OPENAI_API_KEY) {
         model: "gpt-4",
         messages: openAIMessages,
         stream: true,
-        tools: tools && tools.length > 0 ? tools.map(tool => ({
-          type: "function",
-          function: {
-            name: tool.name,
-            description: tool.description,
-            parameters: tool.input_schema
-          }
-        })) : undefined
+        ...(tools && tools.length > 0 ? {
+          tools: tools.map(tool => ({
+            type: "function",
+            function: {
+              name: tool.name,
+              description: tool.description,
+              parameters: tool.input_schema
+            }
+          }))
+        } : {})
       });
 
-      // Use iterator instead of for await to avoid stream cancellation issues
+      // Use iterator to avoid stream cancellation issues
       const iterator = stream[Symbol.asyncIterator]();
-      debugger;
+
       while (true) {
         const { value: chunk, done } = await iterator.next();
         if (done) break;
@@ -133,29 +136,50 @@ export function createOpenAIService(apiKey = process.env.OPENAI_API_KEY) {
           }
         }
 
+        // Accumulate tool call arguments (they come in chunks)
         if (delta?.tool_calls) {
           for (const toolCall of delta.tool_calls) {
-            if (streamHandlers.onToolUse && toolCall.function?.arguments) {
-              const args = toolCall.function.arguments.trim();
-              // Only process complete JSON objects
-              if (args.startsWith('{') && args.endsWith('}')) {
-                try {
-                  await streamHandlers.onToolUse({
-                    type: "tool_use",
-                    id: toolCall.id,
-                    name: toolCall.function.name,
-                    input: JSON.parse(args)
-                  });
-                } catch (e) {
-                  // Skip incomplete tool calls
-                  console.log('Skipping incomplete tool call');
-                }
-              }
+            const index = toolCall.index;
+
+            if (!toolCallsBuffer[index]) {
+              toolCallsBuffer[index] = {
+                id: toolCall.id,
+                name: toolCall.function?.name || '',
+                arguments: ''
+              };
+            }
+
+            if (toolCall.function?.name) {
+              toolCallsBuffer[index].name = toolCall.function.name;
+            }
+
+            if (toolCall.function?.arguments) {
+              toolCallsBuffer[index].arguments += toolCall.function.arguments;
             }
           }
         }
 
+        // When stream finishes, process complete tool calls
         if (chunk.choices[0]?.finish_reason) {
+          // Process any buffered tool calls
+          if (Object.keys(toolCallsBuffer).length > 0) {
+            for (const bufferedCall of Object.values(toolCallsBuffer)) {
+              if (streamHandlers.onToolUse && bufferedCall.arguments) {
+                try {
+                  const parsedArgs = JSON.parse(bufferedCall.arguments);
+                  await streamHandlers.onToolUse({
+                    type: "tool_use",
+                    id: bufferedCall.id,
+                    name: bufferedCall.name,
+                    input: parsedArgs
+                  });
+                } catch (e) {
+                  console.error('Error parsing complete tool arguments:', e);
+                }
+              }
+            }
+          }
+
           finalMessage = {
             role: "assistant",
             content: fullContent,
@@ -194,7 +218,6 @@ export function createOpenAIService(apiKey = process.env.OPENAI_API_KEY) {
 
     return finalMessage;
   };
-
   /**
    * Gets the system prompt content for a given prompt type
    * @param {string} promptType - The prompt type to retrieve
