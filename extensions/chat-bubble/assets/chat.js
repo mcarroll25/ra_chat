@@ -553,6 +553,17 @@
 
           case 'chunk':
             ShopAIChat.UI.removeTypingIndicator();
+
+            // Filter out system content before adding to message
+            if (data.chunk.includes('<long_conversation_reminder>') ||
+                data.chunk.includes('Claude cares about') ||
+                data.chunk.includes('Claude never starts') ||
+                data.chunk.includes('Claude does not use') ||
+                data.chunk.includes('</long_conversation_reminder>') ||
+                data.chunk.includes('<')) {
+              break; // Don't display this chunk
+            }
+
             currentMessageElement.dataset.rawText += data.chunk;
             currentMessageElement.textContent = currentMessageElement.dataset.rawText;
             ShopAIChat.UI.scrollToBottom();
@@ -560,6 +571,16 @@
 
           case 'message_complete':
             ShopAIChat.UI.removeTypingIndicator();
+
+            // Clean system content from the complete message
+            if (currentMessageElement.dataset.rawText) {
+              let cleanedText = currentMessageElement.dataset.rawText;
+              cleanedText = cleanedText.replace(/<long_conversation_reminder>[\s\S]*?<\/long_conversation_reminder>/g, '');
+              cleanedText = cleanedText.replace(/Claude cares about[\s\S]*?even in these circumstances\./g, '');
+              cleanedText = cleanedText.trim();
+              currentMessageElement.dataset.rawText = cleanedText;
+            }
+
             ShopAIChat.Formatting.formatMessageContent(currentMessageElement);
             ShopAIChat.UI.scrollToBottom();
             break;
@@ -659,17 +680,38 @@
             return;
           }
 
-          // Add messages to the UI - filter out tool results
+          // Add messages to the UI - filter out tool results AND system content
           data.messages.forEach(message => {
             try {
               const messageContents = JSON.parse(message.content);
               for (const contentBlock of messageContents) {
                 if (contentBlock.type === 'text') {
-                  ShopAIChat.Message.add(contentBlock.text, message.role, messagesContainer);
+                  const text = contentBlock.text;
+
+                  // Filter out system reminders and Claude-specific content
+                  if (text.includes('<long_conversation_reminder>') ||
+                      text.includes('Claude cares about') ||
+                      text.includes('Claude never starts') ||
+                      text.includes('Claude does not use emojis') ||
+                      text.includes('<') && text.includes('>')) {
+                    continue; // Skip this message
+                  }
+
+                  ShopAIChat.Message.add(text, message.role, messagesContainer);
                 }
               }
             } catch (e) {
-              ShopAIChat.Message.add(message.content, message.role, messagesContainer);
+              const content = message.content;
+
+              // Filter out system content from string messages too
+              if (content.includes('<long_conversation_reminder>') ||
+                  content.includes('Claude cares about') ||
+                  content.includes('Claude never starts') ||
+                  content.includes('Claude does not use emojis')) {
+                return; // Skip this message
+              }
+
+              ShopAIChat.Message.add(content, message.role, messagesContainer);
             }
           });
 

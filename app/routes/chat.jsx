@@ -1,6 +1,6 @@
 /**
  * Chat API Route
- * Handles chat interactions with Claude API and tools
+ * Handles chat interactions with OpenAI API and tools
  */
 import { json } from "@remix-run/node";
 import MCPClient from "../mcp-client";
@@ -169,8 +169,20 @@ async function handleChatSession({
     // Fetch all messages from the database for this conversation
     const dbMessages = await getConversationHistory(conversationId);
 
-    // Format messages for Claude API
-    conversationHistory = dbMessages.map(dbMessage => {
+    // Remove duplicate consecutive messages
+    const deduplicatedMessages = [];
+    for (let i = 0; i < dbMessages.length; i++) {
+      const current = dbMessages[i];
+      const previous = dbMessages[i - 1];
+
+      // Skip if this message is identical to the previous one
+      if (!previous || current.content !== previous.content || current.role !== previous.role) {
+        deduplicatedMessages.push(current);
+      }
+    }
+
+    // Format messages for OpenAI API
+    conversationHistory = deduplicatedMessages.map(dbMessage => {
       let content;
       try {
         content = JSON.parse(dbMessage.content);
@@ -196,6 +208,17 @@ async function handleChatSession({
         {
           // Handle text chunks
           onText: (textDelta) => {
+            // Filter out system reminders before sending to client
+            if (textDelta.includes('<long_conversation_reminder>') ||
+                textDelta.includes('</long_conversation_reminder>') ||
+                textDelta.includes('Claude cares about') ||
+                textDelta.includes('Claude never starts') ||
+                textDelta.includes('Claude does not use') ||
+                textDelta.includes('Claude critically evaluates') ||
+                textDelta.includes('<')) {
+              return; // Don't send this chunk
+            }
+
             stream.sendMessage({
               type: 'chunk',
               chunk: textDelta
