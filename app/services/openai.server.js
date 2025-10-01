@@ -15,14 +15,14 @@ import systemPrompts from "../prompts/prompts.json";
 function convertToOpenAIFormat(messages) {
   return messages
     .filter(msg => {
-      // Skip messages with system reminders or XML-like content
-      if (contentStr.includes('long_conversation_reminder') ||
-          contentStr.includes('Claude cares about') ||
-          contentStr.includes('Claude never starts') ||
-          contentStr.includes('Claude does not use') ||
-          contentStr.includes('Claude critically evaluates') ||
-          contentStr.includes('Claude provides honest') ||
-          contentStr.includes('wellbeing')) {
+      // Completely skip any message with system reminder content
+      const msgContent = JSON.stringify(msg.content || '');
+      if (msgContent.includes('long_conversation_reminder') ||
+          msgContent.includes('Claude cares about') ||
+          msgContent.includes('Claude never starts') ||
+          msgContent.includes('Claude does not use') ||
+          msgContent.includes('Claude critically evaluates') ||
+          msgContent.includes('wellbeing')) {
         console.log('FILTERED OUT MESSAGE WITH SYSTEM CONTENT');
         return false;
       }
@@ -30,12 +30,10 @@ function convertToOpenAIFormat(messages) {
     })
     .map(msg => {
       if (Array.isArray(msg.content)) {
-        // Handle structured content
         const textBlocks = msg.content.filter(block =>
           block.type === 'text' &&
           block.text &&
           !block.text.includes('long_conversation_reminder') &&
-          !block.text.includes('Claude cares about') &&
           !block.text.includes('<')
         );
 
@@ -50,14 +48,9 @@ function convertToOpenAIFormat(messages) {
         };
       }
 
-      // Clean string content more aggressively
       let content = msg.content || '';
       if (typeof content === 'string') {
-        // Remove various system content patterns
         content = content.replace(/<long_conversation_reminder>[\s\S]*?<\/long_conversation_reminder>/g, '');
-        content = content.replace(/Claude cares about[\s\S]*?healthy way\./g, '');
-        content = content.replace(/Claude never starts[\s\S]*?circumstances\./g, '');
-        content = content.replace(/<[\s\S]*?>/g, '');
         content = content.trim();
       }
 
