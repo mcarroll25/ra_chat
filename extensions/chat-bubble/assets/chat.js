@@ -475,21 +475,24 @@
 
         try {
           const promptType = window.shopChatConfig?.promptType || "standardAssistant";
+
+          // Get the shop domain - this is critical for MCP to work!
+          const shopDomain = window.Shopify?.shop || 'restorair.myshopify.com';
+
           const requestBody = JSON.stringify({
             message: userMessage,
             conversation_id: conversationId,
-            prompt_type: promptType
+            prompt_type: promptType,
+            shop: shopDomain  // ← ADD THIS LINE
           });
 
           const streamUrl = 'https://rachat.vercel.app/chat';
-          const shopId = window.shopId;
 
           const response = await fetch(streamUrl, {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
-              'Accept': 'text/event-stream',
-              'X-Shopify-Shop-Id': shopId
+              'Accept': 'text/event-stream'
             },
             body: requestBody
           });
@@ -534,7 +537,6 @@
             'assistant', messagesContainer);
         }
       },
-
       /**
        * Handle stream events from the API
        * @param {Object} data - Event data
