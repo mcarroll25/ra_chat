@@ -119,7 +119,7 @@ export function createOpenAIService(apiKey = process.env.OPENAI_API_KEY) {
 
       // Use iterator instead of for await to avoid stream cancellation issues
       const iterator = stream[Symbol.asyncIterator]();
-
+      debugger;
       while (true) {
         const { value: chunk, done } = await iterator.next();
         if (done) break;
@@ -134,6 +134,7 @@ export function createOpenAIService(apiKey = process.env.OPENAI_API_KEY) {
         }
 
         if (delta?.tool_calls) {
+          debugger;
           // Handle tool calls
           for (const toolCall of delta.tool_calls) {
             if (streamHandlers.onToolUse && toolCall.function) {
