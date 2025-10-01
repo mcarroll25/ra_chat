@@ -134,6 +134,8 @@ export function createOpenAIService(apiKey = process.env.OPENAI_API_KEY) {
         }
 
         if (delta?.tool_calls) {
+          continue;
+          /*
           debugger;
           // Handle tool calls
           for (const toolCall of delta.tool_calls) {
@@ -150,6 +152,7 @@ export function createOpenAIService(apiKey = process.env.OPENAI_API_KEY) {
               }
             }
           }
+            */
         }
 
         if (chunk.choices[0]?.finish_reason) {
