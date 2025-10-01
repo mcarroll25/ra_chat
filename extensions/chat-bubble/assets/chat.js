@@ -651,7 +651,8 @@
           messagesContainer.appendChild(loadingMessage);
 
           // Fetch history from the server
-          const historyUrl = `https://rachat.vercel.app/chat/chat?history=true&conversation_id=${encodeURIComponent(conversationId)}`;
+          //const historyUrl = `https://rachat.vercel.app/chat/chat?history=true&conversation_id=${encodeURIComponent(conversationId)}`;
+          const historyUrl = `https://rachat.vercel.app/chat?history=true&conversation_id=${encodeURIComponent(conversationId)}`;
           console.log('Fetching history from:', historyUrl);
 
           const response = await fetch(historyUrl, {
