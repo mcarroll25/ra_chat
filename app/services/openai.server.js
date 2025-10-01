@@ -134,25 +134,25 @@ export function createOpenAIService(apiKey = process.env.OPENAI_API_KEY) {
         }
 
         if (delta?.tool_calls) {
-          continue;
-          /*
-          debugger;
-          // Handle tool calls
           for (const toolCall of delta.tool_calls) {
-            if (streamHandlers.onToolUse && toolCall.function) {
-              try {
-                await streamHandlers.onToolUse({
-                  type: "tool_use",
-                  id: toolCall.id,
-                  name: toolCall.function.name,
-                  input: JSON.parse(toolCall.function.arguments || "{}")
-                });
-              } catch (e) {
-                console.error('Error parsing tool arguments:', e);
+            if (streamHandlers.onToolUse && toolCall.function?.arguments) {
+              const args = toolCall.function.arguments.trim();
+              // Only process complete JSON objects
+              if (args.startsWith('{') && args.endsWith('}')) {
+                try {
+                  await streamHandlers.onToolUse({
+                    type: "tool_use",
+                    id: toolCall.id,
+                    name: toolCall.function.name,
+                    input: JSON.parse(args)
+                  });
+                } catch (e) {
+                  // Skip incomplete tool calls
+                  console.log('Skipping incomplete tool call');
+                }
               }
             }
           }
-            */
         }
 
         if (chunk.choices[0]?.finish_reason) {
