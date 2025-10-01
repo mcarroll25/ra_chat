@@ -16,11 +16,15 @@ function convertToOpenAIFormat(messages) {
   return messages
     .filter(msg => {
       // Skip messages with system reminders or XML-like content
-      if (typeof msg.content === 'string') {
-        if (msg.content.includes('long_conversation_reminder')) return false;
-        if (msg.content.includes('Claude cares about')) return false;
-        if (msg.content.includes('Claude never starts')) return false;
-        if (msg.content.includes('<')) return false;
+      if (contentStr.includes('long_conversation_reminder') ||
+          contentStr.includes('Claude cares about') ||
+          contentStr.includes('Claude never starts') ||
+          contentStr.includes('Claude does not use') ||
+          contentStr.includes('Claude critically evaluates') ||
+          contentStr.includes('Claude provides honest') ||
+          contentStr.includes('wellbeing')) {
+        console.log('FILTERED OUT MESSAGE WITH SYSTEM CONTENT');
+        return false;
       }
       return true;
     })
@@ -148,13 +152,16 @@ export function createOpenAIService(apiKey = process.env.OPENAI_API_KEY) {
         if (chunk.choices[0]?.finish_reason) {
           finalMessage = {
             role: "assistant",
-            content: fullContent
+            content: fullContent,
+            stop_reason: "end_turn"
           };
 
           if (streamHandlers.onMessage) {
             streamHandlers.onMessage(finalMessage);
           }
+          break; // IMPORTANT: Break here to prevent multiple calls
         }
+
       }
     } catch (error) {
           console.error('OpenAI streaming error:', error);
