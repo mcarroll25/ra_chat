@@ -98,27 +98,32 @@ export function createOpenAIService(apiKey = process.env.OPENAI_API_KEY) {
       ...convertedMessages
     ];
 
-    // Create stream
-    const stream = await openai.chat.completions.create({
-      model: "gpt-4", // or "gpt-3.5-turbo"
-      messages: openAIMessages,
-      stream: true,
-      tools: tools && tools.length > 0 ? tools.map(tool => ({
-        type: "function",
-        function: {
-          name: tool.name,
-          description: tool.description,
-          parameters: tool.input_schema
-        }
-      })) : undefined
-    });
-
     let fullContent = "";
     let finalMessage = null;
 
-    // Process stream
     try {
-      for await (const chunk of stream) {
+      // Create stream
+      const stream = await openai.chat.completions.create({
+        model: "gpt-4",
+        messages: openAIMessages,
+        stream: true,
+        tools: tools && tools.length > 0 ? tools.map(tool => ({
+          type: "function",
+          function: {
+            name: tool.name,
+            description: tool.description,
+            parameters: tool.input_schema
+          }
+        })) : undefined
+      });
+
+      // Use iterator instead of for await to avoid stream cancellation issues
+      const iterator = stream[Symbol.asyncIterator]();
+
+      while (true) {
+        const { value: chunk, done } = await iterator.next();
+        if (done) break;
+
         const delta = chunk.choices[0]?.delta;
 
         if (delta?.content) {
@@ -132,12 +137,16 @@ export function createOpenAIService(apiKey = process.env.OPENAI_API_KEY) {
           // Handle tool calls
           for (const toolCall of delta.tool_calls) {
             if (streamHandlers.onToolUse && toolCall.function) {
-              await streamHandlers.onToolUse({
-                type: "tool_use",
-                id: toolCall.id,
-                name: toolCall.function.name,
-                input: JSON.parse(toolCall.function.arguments || "{}")
-              });
+              try {
+                await streamHandlers.onToolUse({
+                  type: "tool_use",
+                  id: toolCall.id,
+                  name: toolCall.function.name,
+                  input: JSON.parse(toolCall.function.arguments || "{}")
+                });
+              } catch (e) {
+                console.error('Error parsing tool arguments:', e);
+              }
             }
           }
         }
@@ -152,22 +161,21 @@ export function createOpenAIService(apiKey = process.env.OPENAI_API_KEY) {
           if (streamHandlers.onMessage) {
             streamHandlers.onMessage(finalMessage);
           }
-          break; // IMPORTANT: Break here to prevent multiple calls
+          break;
         }
-
       }
     } catch (error) {
       console.error('OpenAI streaming error:', error);
       if (!finalMessage) {
         finalMessage = {
           role: "assistant",
-          content: fullContent || "I'm having trouble processing that request. Please try again.",
+          content: fullContent || "I'm having trouble processing that request.",
           stop_reason: "end_turn"
         };
       }
     }
 
-    // CRITICAL: Always set stop_reason
+    // Ensure we always return a message with stop_reason
     if (!finalMessage) {
       finalMessage = {
         role: "assistant",
@@ -176,7 +184,6 @@ export function createOpenAIService(apiKey = process.env.OPENAI_API_KEY) {
       };
     }
 
-    // Ensure stop_reason exists
     if (!finalMessage.stop_reason) {
       finalMessage.stop_reason = "end_turn";
     }
