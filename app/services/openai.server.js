@@ -157,14 +157,28 @@ export function createOpenAIService(apiKey = process.env.OPENAI_API_KEY) {
 
       }
     } catch (error) {
-          console.error('OpenAI streaming error:', error);
-          // Return a basic message instead of crashing
-          return {
-            role: "assistant",
-            content: fullContent || "I'm having trouble processing that request. Please try again.",
-            stop_reason: "end_turn"
-          };
+      console.error('OpenAI streaming error:', error);
+      if (!finalMessage) {
+        finalMessage = {
+          role: "assistant",
+          content: fullContent || "I'm having trouble processing that request. Please try again.",
+          stop_reason: "end_turn"
+        };
+      }
+    }
 
+    // CRITICAL: Always set stop_reason
+    if (!finalMessage) {
+      finalMessage = {
+        role: "assistant",
+        content: fullContent || "",
+        stop_reason: "end_turn"
+      };
+    }
+
+    // Ensure stop_reason exists
+    if (!finalMessage.stop_reason) {
+      finalMessage.stop_reason = "end_turn";
     }
 
     return finalMessage;
