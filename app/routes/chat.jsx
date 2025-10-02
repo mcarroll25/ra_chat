@@ -75,6 +75,15 @@ async function handleChatRequest(request) {
   try {
     // Get message data from request body
     const body = await request.json();
+
+    // Debug logging
+    console.log('=== REQUEST BODY DEBUG ===');
+    console.log('Full body:', JSON.stringify(body, null, 2));
+    console.log('body.shop:', body.shop);
+    console.log('body.message:', body.message);
+    console.log('body.conversation_id:', body.conversation_id);
+    console.log('========================');
+
     const userMessage = body.message;
     const shop = body.shop; // Get shop from request body
 
@@ -124,36 +133,19 @@ async function handleChatSession({
   userMessage,
   conversationId,
   promptType,
+  shop, // Get shop from parameter
   stream
 }) {
   // Initialize services
   const openaiService = createOpenAIService();
   const toolService = createToolService();
 
-  // Get shop info from request
-  const url = new URL(request.url);
-  let shop = url.searchParams.get('shop');
-
-  // Debug the full URL
-  console.log('Full URL:', request.url);
-
-  // Debug the parsed URL object
-  console.log('URL object:', url);
-
-  // Debug search params
-  console.log('Search params string:', url.search);
-  console.log('Shop param:', shop);
-
-  // Log all search parameters
-  console.log('All params:');
-  for (const [key, value] of url.searchParams.entries()) {
-    console.log(`  ${key} = ${value}`);
-  }
-
-  // Temporary fallback for testing
+  // Use shop from parameter or fallback
   if (!shop) {
-    shop = 'restorair.myshopify.com'; // TEMPORARY: Remove after finding frontend code
+    shop = 'restorair.myshopify.com';
     console.log('⚠️  No shop parameter, using hardcoded fallback:', shop);
+  } else {
+    console.log('✓ Using shop from request:', shop);
   }
 
   const hostUrl = `https://${shop}`;
@@ -357,26 +349,44 @@ async function handleChatSession({
                 conversationId
               );
             } else {
-              // Format the result for the conversation
-              const formattedResult = {
-                content: [{
-                  type: "text",
-                  text: typeof toolResult.content === 'string'
-                    ? toolResult.content
-                    : JSON.stringify(toolResult.content || toolResult)
-                }]
-              };
+              // For OpenAI, tool results need to be added as messages with role "tool"
+              // Extract the actual content
+              let toolResultContent = '';
+              if (toolResult.content && Array.isArray(toolResult.content)) {
+                toolResultContent = toolResult.content[0]?.text || JSON.stringify(toolResult);
+              } else {
+                toolResultContent = JSON.stringify(toolResult);
+              }
 
-              console.log('Formatted tool result for conversation:', JSON.stringify(formattedResult).substring(0, 300));
+              console.log('Tool result content length:', toolResultContent.length);
 
-              await toolService.handleToolSuccess(
-                formattedResult,
-                toolUse.name,
-                toolUse.id,
-                conversationHistory,
-                productsToDisplay,
-                conversationId
-              );
+              // Add tool result to conversation in OpenAI format
+              conversationHistory.push({
+                role: "tool",
+                tool_call_id: toolUse.id,
+                content: toolResultContent
+              });
+
+              // Save to database
+              await saveMessage(conversationId, 'tool', JSON.stringify({
+                tool_call_id: toolUse.id,
+                content: toolResultContent
+              })).catch((error) => {
+                console.error("Error saving tool result to database:", error);
+              });
+
+              // Process products if this was a product search
+              if (toolUse.name === 'search_shop_catalog') {
+                try {
+                  const resultData = JSON.parse(toolResultContent);
+                  if (resultData.products && Array.isArray(resultData.products)) {
+                    console.log(`Found ${resultData.products.length} products in tool result`);
+                    productsToDisplay.push(...resultData.products.slice(0, AppConfig.tools.maxProductsToDisplay));
+                  }
+                } catch (e) {
+                  console.error('Error parsing product data:', e);
+                }
+              }
 
               // Set flag to continue conversation after tool use
               needsContinuation = true;

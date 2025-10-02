@@ -7,11 +7,34 @@ import AppConfig from "./config.server";
 import systemPrompts from "../prompts/prompts.json";
 
 /**
+ * Filter out system reminder content from text
+ * @param {string} text - Text to filter
+ * @returns {string} Filtered text
+ */
+function filterSystemContent(text) {
+  if (!text) return '';
+
+  // Remove long_conversation_reminder tags and everything inside
+  let filtered = text.replace(/<long_conversation_reminder>[\s\S]*?<\/long_conversation_reminder>/g, '');
+
+  // Remove other system patterns
+  filtered = filtered.replace(/Claude cares about[\s\S]*?even in these circumstances\./g, '');
+  filtered = filtered.replace(/Claude never starts[\s\S]*?positive adjective\./g, '');
+  filtered = filtered.replace(/Claude does not use emojis[\s\S]*?these circumstances\./g, '');
+  filtered = filtered.replace(/Claude avoids the use[\s\S]*?communication\./g, '');
+  filtered = filtered.replace(/Claude critically evaluates[\s\S]*?own opinion\./g, '');
+  filtered = filtered.replace(/If Claude notices[\s\S]*?harmless thinking\./g, '');
+  filtered = filtered.replace(/Claude provides honest[\s\S]*?in the moment\./g, '');
+  filtered = filtered.replace(/Claude tries to maintain[\s\S]*?actual identity\./g, '');
+
+  return filtered.trim();
+}
+
+/**
  * Convert Claude/database message format to OpenAI format
  * @param {Array} messages - Messages in Claude format
  * @returns {Array} Messages in OpenAI format
  */
-
 function convertToOpenAIFormat(messages) {
   return messages
     .filter(msg => {
@@ -38,7 +61,7 @@ function convertToOpenAIFormat(messages) {
         );
 
         const textContent = textBlocks
-          .map(block => block.text)
+          .map(block => filterSystemContent(block.text))
           .join('\n')
           .trim();
 
@@ -50,8 +73,7 @@ function convertToOpenAIFormat(messages) {
 
       let content = msg.content || '';
       if (typeof content === 'string') {
-        content = content.replace(/<long_conversation_reminder>[\s\S]*?<\/long_conversation_reminder>/g, '');
-        content = content.trim();
+        content = filterSystemContent(content);
       }
 
       return {
@@ -160,7 +182,8 @@ export function createOpenAIService(apiKey = process.env.OPENAI_API_KEY) {
         }
 
         // When stream finishes, process complete tool calls
-        if (chunk.choices[0]?.finish_reason) {
+        if (chunk.choices[0]?.finish_reason === 'tool_calls') {
+          console.log('OpenAI wants to use tools');
           // Process any buffered tool calls
           if (Object.keys(toolCallsBuffer).length > 0) {
             for (const bufferedCall of Object.values(toolCallsBuffer)) {
@@ -179,6 +202,9 @@ export function createOpenAIService(apiKey = process.env.OPENAI_API_KEY) {
               }
             }
           }
+          // Don't break - let the loop continue
+        } else if (chunk.choices[0]?.finish_reason === 'stop') {
+          console.log('OpenAI finished with stop reason, content length:', fullContent.length);
 
           finalMessage = {
             role: "assistant",
@@ -197,7 +223,7 @@ export function createOpenAIService(apiKey = process.env.OPENAI_API_KEY) {
       if (!finalMessage) {
         finalMessage = {
           role: "assistant",
-          content: fullContent || "I'm having trouble processing that request.",
+          content: filterSystemContent(fullContent) || "I'm having trouble processing that request.",
           stop_reason: "end_turn"
         };
       }
@@ -207,7 +233,7 @@ export function createOpenAIService(apiKey = process.env.OPENAI_API_KEY) {
     if (!finalMessage) {
       finalMessage = {
         role: "assistant",
-        content: fullContent || "",
+        content: filterSystemContent(fullContent) || "",
         stop_reason: "end_turn"
       };
     }
@@ -218,6 +244,7 @@ export function createOpenAIService(apiKey = process.env.OPENAI_API_KEY) {
 
     return finalMessage;
   };
+
   /**
    * Gets the system prompt content for a given prompt type
    * @param {string} promptType - The prompt type to retrieve
