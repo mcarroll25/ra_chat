@@ -314,14 +314,18 @@ async function handleChatSession({
         // Handle tool use (if tools are enabled)
         onToolUse: async (toolUse) => {
           console.log('Tool use requested:', toolUse.name);
+          console.log('assistantMessage present?', !!toolUse.assistantMessage);
 
           // Add the assistant's tool call message to history first (required by OpenAI)
           if (toolUse.assistantMessage) {
+            console.log('Adding assistant tool call message to history');
             conversationHistory.push(toolUse.assistantMessage);
             await saveMessage(conversationId, 'assistant', JSON.stringify(toolUse.assistantMessage))
               .catch((error) => {
                 console.error("Error saving assistant tool call message:", error);
               });
+          } else {
+            console.error('WARNING: No assistantMessage provided with toolUse!');
           }
 
           stream.sendMessage({
