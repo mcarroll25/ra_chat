@@ -248,6 +248,14 @@ async function handleChatSession({
       } catch (e) {
         content = dbMessage.content;
       }
+
+        // Ensure content is always an array for Claude
+      if (typeof content === 'string') {
+        content = [{ type: 'text', text: content }];
+      } else if (!Array.isArray(content)) {
+        content = [{ type: 'text', text: String(content) }];
+      }
+
       return {
         role: dbMessage.role,
         content
