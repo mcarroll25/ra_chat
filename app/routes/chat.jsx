@@ -143,6 +143,7 @@ async function handleChatSession({
   // Initialize MCP client
   let mcpClient;
   let availableTools = [];
+  let useFallbackTools = false;
 
   try {
     console.log(`Initializing MCP client for shop: ${shop}`);
@@ -157,6 +158,7 @@ async function handleChatSession({
       }
     } catch (e) {
       console.warn("✗ Could not connect to storefront MCP server:", e.message);
+      useFallbackTools = true;
     }
 
     try {
@@ -170,14 +172,42 @@ async function handleChatSession({
     }
 
     availableTools = mcpClient.tools;
-    console.log(`📦 Total tools available: ${availableTools.length}`);
 
+    // If MCP has no tools, use fallback
     if (availableTools.length === 0) {
-      console.warn("⚠️  No MCP tools available - chatbot will work but without product search");
+      console.log('🔄 No MCP tools available, enabling fallback');
+      useFallbackTools = true;
+      availableTools = [{
+        name: "search_shop_catalog",
+        description: "Search the store's product catalog for air purifiers and related products. Use this when customers ask about available products, pricing, or features.",
+        input_schema: {
+          type: "object",
+          properties: {
+            query: {
+              type: "string",
+              description: "Search query for products"
+            }
+          },
+          required: ["query"]
+        }
+      }];
     }
+
+    console.log(`📦 Total tools available: ${availableTools.length}`);
   } catch (error) {
     console.error("❌ Error initializing MCP client:", error);
-    // Continue without tools if MCP fails
+    useFallbackTools = true;
+    availableTools = [{
+      name: "search_shop_catalog",
+      description: "Search the store's product catalog for air purifiers and related products.",
+      input_schema: {
+        type: "object",
+        properties: {
+          query: { type: "string", description: "Search query" }
+        },
+        required: ["query"]
+      }
+    }];
   }
 
   try {
