@@ -85,7 +85,7 @@ async function handleChatRequest(request) {
     console.log('========================');
 
     const userMessage = body.message;
-    const shop = body.shop; // Get shop from request body
+    const shop = body.shop;
 
     // Validate required message
     if (!userMessage) {
@@ -106,7 +106,7 @@ async function handleChatRequest(request) {
         userMessage,
         conversationId,
         promptType,
-        shop, // Pass shop to session handler
+        shop,
         stream
       });
     });
@@ -347,23 +347,23 @@ async function handleChatSession({
 
             // Check if we've exceeded the limit for THIS specific tool
             if (toolCallCounts[toolUse.name] >= MAX_TOOL_CALLS_PER_TOOL) {
-              console.warn(`⚠️  Tool ${toolUse.name} has been called ${toolCallCounts[toolUse.name]} times already. Blocking further calls.`);
+              console.warn(`⚠️ HARD STOP: Tool ${toolUse.name} called ${toolCallCounts[toolUse.name]} times`);
 
-              const noRetryMessage = {
-                role: 'user',
-                content: [{
-                  type: "tool_result",
-                  tool_use_id: toolUse.id,
-                  content: JSON.stringify({
-                    error: "Maximum search attempts reached",
-                    message: "You have already searched multiple times with no results. STOP searching and inform the customer that we don't currently carry this item."
-                  })
-                }]
-              };
+              // Force a final assistant message and stop the loop
+              const stopMessage = "I apologize, but I'm unable to find what you're looking for in our catalog right now. Is there something else I can help you with?";
 
-              conversationHistory.push(noRetryMessage);
-              await saveMessage(conversationId, 'user', JSON.stringify(noRetryMessage.content));
-              needsContinuation = true;
+              conversationHistory.push({
+                role: 'assistant',
+                content: stopMessage
+              });
+
+              await saveMessage(conversationId, 'assistant', stopMessage);
+
+              stream.sendMessage({ type: 'chunk', chunk: stopMessage });
+              stream.sendMessage({ type: 'message_complete' });
+
+              // CRITICAL: Stop the loop - do not continue
+              needsContinuation = false;
               return;
             }
 
