@@ -351,21 +351,13 @@ async function handleChatSession({
                   stream.sendMessage,
                   conversationId
                 );
+
               } else {
-                // Format the result for the conversation
-                const formattedResult = {
-                  content: [{
-                    type: "text",
-                    text: typeof toolResult.content === 'string'
-                      ? toolResult.content
-                      : JSON.stringify(toolResult.content || toolResult)
-                  }]
-                };
+                console.log('Raw tool result:', JSON.stringify(toolResult).substring(0, 500));
 
-                console.log('Formatted tool result:', JSON.stringify(formattedResult).substring(0, 300));
-
+                // Pass the RAW tool result to extract products
                 await toolService.handleToolSuccess(
-                  formattedResult,
+                  toolResult,  // ← CORRECT - pass raw result
                   toolUse.name,
                   toolUse.id,
                   conversationHistory,
