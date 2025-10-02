@@ -248,8 +248,14 @@ async function handleChatSession({
     // Products to display (if any tool returns products)
     const productsToDisplay = [];
 
-    // Execute the conversation stream
-    const finalMessage = await openaiService.streamConversation(
+    // Track if we need to continue the conversation after tool use
+    let needsContinuation = false;
+
+    // Execute the conversation stream - may need multiple iterations for tool use
+    do {
+      needsContinuation = false;
+
+      const finalMessage = await openaiService.streamConversation(
       {
         messages: conversationHistory,
         promptType,
@@ -258,6 +264,16 @@ async function handleChatSession({
       {
         // Handle text chunks
         onText: (textDelta) => {
+          // Filter out system content before sending
+          if (textDelta.includes('<long_conversation_reminder>') ||
+              textDelta.includes('Claude cares about') ||
+              textDelta.includes('Claude never starts') ||
+              textDelta.includes('Claude does not use') ||
+              textDelta.includes('</long_conversation_reminder>')) {
+            console.log('Filtered system content from chunk');
+            return;
+          }
+
           stream.sendMessage({
             type: 'chunk',
             chunk: textDelta
@@ -266,6 +282,10 @@ async function handleChatSession({
 
         // Handle complete messages
         onMessage: (message) => {
+          // Log the message content for debugging
+          console.log('Message complete, content length:',
+            typeof message.content === 'string' ? message.content.length : 'not a string');
+
           conversationHistory.push({
             role: message.role,
             content: message.content
@@ -278,10 +298,13 @@ async function handleChatSession({
 
           // Send products if any were found
           if (productsToDisplay.length > 0) {
+            console.log(`Sending ${productsToDisplay.length} products to frontend`);
             stream.sendMessage({
               type: 'products',
               products: productsToDisplay
             });
+            // Clear products array after sending
+            productsToDisplay.length = 0;
           }
 
           // Send a completion message
