@@ -184,7 +184,22 @@ export function createOpenAIService(apiKey = process.env.OPENAI_API_KEY) {
         // When stream finishes, process complete tool calls
         if (chunk.choices[0]?.finish_reason === 'tool_calls') {
           console.log('OpenAI wants to use tools');
-          // Process any buffered tool calls
+
+          // Build the assistant message with tool_calls
+          const assistantMessage = {
+            role: "assistant",
+            content: null,
+            tool_calls: Object.values(toolCallsBuffer).map(call => ({
+              id: call.id,
+              type: "function",
+              function: {
+                name: call.name,
+                arguments: call.arguments
+              }
+            }))
+          };
+
+          // Process tool calls for execution
           if (Object.keys(toolCallsBuffer).length > 0) {
             for (const bufferedCall of Object.values(toolCallsBuffer)) {
               if (streamHandlers.onToolUse && bufferedCall.arguments) {
@@ -194,7 +209,8 @@ export function createOpenAIService(apiKey = process.env.OPENAI_API_KEY) {
                     type: "tool_use",
                     id: bufferedCall.id,
                     name: bufferedCall.name,
-                    input: parsedArgs
+                    input: parsedArgs,
+                    assistantMessage: assistantMessage // Pass the full assistant message
                   });
                 } catch (e) {
                   console.error('Error parsing complete tool arguments:', e);

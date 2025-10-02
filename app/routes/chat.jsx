@@ -315,6 +315,15 @@ async function handleChatSession({
         onToolUse: async (toolUse) => {
           console.log('Tool use requested:', toolUse.name);
 
+          // Add the assistant's tool call message to history first (required by OpenAI)
+          if (toolUse.assistantMessage) {
+            conversationHistory.push(toolUse.assistantMessage);
+            await saveMessage(conversationId, 'assistant', JSON.stringify(toolUse.assistantMessage))
+              .catch((error) => {
+                console.error("Error saving assistant tool call message:", error);
+              });
+          }
+
           stream.sendMessage({
             type: 'tool_use',
             tool_name: toolUse.name,
