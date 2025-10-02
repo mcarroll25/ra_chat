@@ -3,11 +3,13 @@
  * Handles chat interactions with OpenAI API and tools
  */
 import { json } from "@remix-run/node";
+import MCPClient from "../mcp-client";
 import { saveMessage, getConversationHistory } from "../db.server";
 import AppConfig from "../services/config.server";
 import { createSseStream } from "../services/streaming.server";
 import { createOpenAIService } from "../services/openai.server";
 import { createToolService } from "../services/tool.server";
+import { searchProductsFallback } from "../services/fallback-product-search.server";
 
 /**
  * Remix loader function for handling GET requests
@@ -126,6 +128,58 @@ async function handleChatSession({
   const openaiService = createOpenAIService();
   const toolService = createToolService();
 
+  // Get shop info from request
+  const url = new URL(request.url);
+  let shop = url.searchParams.get('shop');
+
+  // Temporary fallback for testing
+  if (!shop) {
+    shop = 'restorair.myshopify.com'; // TEMPORARY: Remove after finding frontend code
+    console.log('⚠️  No shop parameter, using hardcoded fallback:', shop);
+  }
+
+  const hostUrl = `https://${shop}`;
+
+  // Initialize MCP client
+  let mcpClient;
+  let availableTools = [];
+
+  try {
+    console.log(`Initializing MCP client for shop: ${shop}`);
+    mcpClient = new MCPClient(hostUrl, conversationId, shop, null);
+
+    // Try to connect to both MCP servers
+    try {
+      const storefrontTools = await mcpClient.connectToStorefrontServer();
+      console.log(`✓ Connected to storefront MCP, got ${storefrontTools.length} tools`);
+      if (storefrontTools.length > 0) {
+        console.log('Storefront tools:', storefrontTools.map(t => t.name).join(', '));
+      }
+    } catch (e) {
+      console.warn("✗ Could not connect to storefront MCP server:", e.message);
+    }
+
+    try {
+      const customerTools = await mcpClient.connectToCustomerServer();
+      console.log(`✓ Connected to customer MCP, got ${customerTools.length} tools`);
+      if (customerTools.length > 0) {
+        console.log('Customer tools:', customerTools.map(t => t.name).join(', '));
+      }
+    } catch (e) {
+      console.warn("✗ Could not connect to customer MCP server:", e.message);
+    }
+
+    availableTools = mcpClient.tools;
+    console.log(`📦 Total tools available: ${availableTools.length}`);
+
+    if (availableTools.length === 0) {
+      console.warn("⚠️  No MCP tools available - chatbot will work but without product search");
+    }
+  } catch (error) {
+    console.error("❌ Error initializing MCP client:", error);
+    // Continue without tools if MCP fails
+  }
+
   try {
     // Send conversation ID to client
     stream.sendMessage({ type: 'id', conversation_id: conversationId });
@@ -169,7 +223,7 @@ async function handleChatSession({
       {
         messages: conversationHistory,
         promptType,
-        tools: undefined // Add your tools array here if needed
+        tools: availableTools.length > 0 ? availableTools : undefined
       },
       {
         // Handle text chunks
@@ -214,22 +268,50 @@ async function handleChatSession({
             tool_input: toolUse.input
           });
 
-          // Execute tool and handle result
+          // Execute the tool - use MCP or fallback
           try {
-            // You would implement actual tool execution here
-            // For now, this is a placeholder
-            const toolResult = {
-              content: [{ text: JSON.stringify({ error: 'Tool execution not implemented' }) }]
-            };
+            let toolResult;
 
-            await toolService.handleToolSuccess(
-              toolResult,
-              toolUse.name,
-              toolUse.id,
-              conversationHistory,
-              productsToDisplay,
-              conversationId
-            );
+            if (useFallbackTools && toolUse.name === 'search_shop_catalog') {
+              // Use fallback GraphQL search with request auth
+              console.log('Using fallback product search with session auth');
+              toolResult = await searchProductsFallback(request, toolUse.input.query);
+            } else if (mcpClient) {
+              // Use MCP
+              console.log('Using MCP client');
+              toolResult = await mcpClient.callTool(toolUse.name, toolUse.input);
+            } else {
+              throw new Error("No tool execution method available");
+            }
+
+            // Check if result has error
+            if (toolResult.error) {
+              await toolService.handleToolError(
+                toolResult,
+                toolUse.name,
+                toolUse.id,
+                conversationHistory,
+                stream.sendMessage,
+                conversationId
+              );
+            } else {
+              // Format the result for the conversation
+              const formattedResult = {
+                content: [{
+                  type: "text",
+                  text: typeof toolResult === 'string' ? toolResult : JSON.stringify(toolResult)
+                }]
+              };
+
+              await toolService.handleToolSuccess(
+                formattedResult,
+                toolUse.name,
+                toolUse.id,
+                conversationHistory,
+                productsToDisplay,
+                conversationId
+              );
+            }
           } catch (error) {
             console.error('Tool execution error:', error);
             await toolService.handleToolError(
