@@ -24,6 +24,7 @@
     "node": "20.x"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.65.0",
     "@prisma/client": "^6.2.1",
     "@remix-run/dev": "^2.16.1",
     "@remix-run/fs-routes": "^2.16.1",
