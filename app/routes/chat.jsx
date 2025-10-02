@@ -255,7 +255,7 @@ async function handleChatSession({
     do {
       needsContinuation = false;
 
-      const finalMessage = await openaiService.streamConversation(
+      await openaiService.streamConversation(
       {
         messages: conversationHistory,
         promptType,
@@ -264,16 +264,6 @@ async function handleChatSession({
       {
         // Handle text chunks
         onText: (textDelta) => {
-          // Filter out system content before sending
-          if (textDelta.includes('<long_conversation_reminder>') ||
-              textDelta.includes('Claude cares about') ||
-              textDelta.includes('Claude never starts') ||
-              textDelta.includes('Claude does not use') ||
-              textDelta.includes('</long_conversation_reminder>')) {
-            console.log('Filtered system content from chunk');
-            return;
-          }
-
           stream.sendMessage({
             type: 'chunk',
             chunk: textDelta
@@ -364,6 +354,9 @@ async function handleChatSession({
                 productsToDisplay,
                 conversationId
               );
+
+              // Set flag to continue conversation after tool use
+              needsContinuation = true;
             }
           } catch (error) {
             console.error('Tool execution error:', error);
@@ -379,6 +372,8 @@ async function handleChatSession({
         }
       }
     );
+
+    } while (needsContinuation); // Continue if tools were used
 
     // Signal end of turn
     stream.sendMessage({ type: 'end_turn' });
