@@ -1,429 +1,93 @@
 /**
- * Chat API Route
- * Handles chat interactions with Claude API and tools
+ * Claude Service
+ * Manages interactions with the Claude API
  */
-import { json } from "@remix-run/node";
-import MCPClient from "../mcp-client";
-import { saveMessage, getConversationHistory } from "../db.server";
-import AppConfig from "../services/config.server";
-import { createSseStream } from "../services/streaming.server";
-import { createClaudeService } from "../services/claude.server";
-import { createToolService } from "../services/tool.server";
-import { searchProductsFallback } from "../services/fallback-product-search.server";
+import { Anthropic } from "@anthropic-ai/sdk";
+import AppConfig from "./config.server";
+import systemPrompts from "../prompts/prompts.json";
 
 /**
- * Remix loader function for handling GET requests
+ * Creates a Claude service instance
+ * @param {string} apiKey - Claude API key
+ * @returns {Object} Claude service with methods for interacting with Claude API
  */
-export async function loader({ request }) {
-  // Handle OPTIONS requests (CORS preflight)
-  if (request.method === "OPTIONS") {
-    return new Response(null, {
-      status: 204,
-      headers: getCorsHeaders(request)
+export function createClaudeService(apiKey = process.env.CLAUDE_API_KEY) {
+  // Initialize Claude client
+  const anthropic = new Anthropic({ apiKey });
+
+  /**
+   * Streams a conversation with Claude
+   * @param {Object} params - Stream parameters
+   * @param {Array} params.messages - Conversation history
+   * @param {string} params.promptType - The type of system prompt to use
+   * @param {Array} params.tools - Available tools for Claude
+   * @param {Object} streamHandlers - Stream event handlers
+   * @param {Function} streamHandlers.onText - Handles text chunks
+   * @param {Function} streamHandlers.onMessage - Handles complete messages
+   * @param {Function} streamHandlers.onToolUse - Handles tool use requests
+   * @returns {Promise<Object>} The final message
+   */
+  const streamConversation = async ({
+    messages,
+    promptType = AppConfig.api.defaultPromptType,
+    tools
+  }, streamHandlers) => {
+    // Get system prompt from configuration or use default
+    const systemInstruction = getSystemPrompt(promptType);
+
+    // Create stream
+    const stream = await anthropic.messages.stream({
+      model: AppConfig.api.defaultModel,
+      max_tokens: AppConfig.api.maxTokens,
+      system: systemInstruction,
+      messages,
+      tools: tools && tools.length > 0 ? tools : undefined
     });
-  }
 
-  const url = new URL(request.url);
-
-  // Handle history fetch requests
-  if (url.searchParams.has('history') && url.searchParams.has('conversation_id')) {
-    return handleHistoryRequest(request, url.searchParams.get('conversation_id'));
-  }
-
-  // Handle SSE requests
-  if (!url.searchParams.has('history') && request.headers.get("Accept") === "text/event-stream") {
-    return handleChatRequest(request);
-  }
-
-  // API-only: reject all other requests
-  return json(
-    { error: AppConfig.errorMessages.apiUnsupported },
-    { status: 400, headers: getCorsHeaders(request) }
-  );
-}
-
-/**
- * Remix action function for handling POST requests
- */
-export async function action({ request }) {
-  return handleChatRequest(request);
-}
-
-/**
- * Handle history fetch requests
- */
-async function handleHistoryRequest(request, conversationId) {
-  try {
-    const messages = await getConversationHistory(conversationId);
-    return json(
-      { messages },
-      { headers: getCorsHeaders(request) }
-    );
-  } catch (error) {
-    console.error('Error fetching history:', error);
-    return json(
-      { error: 'Failed to fetch conversation history' },
-      { status: 500, headers: getCorsHeaders(request) }
-    );
-  }
-}
-
-/**
- * Handle chat requests (both GET and POST)
- */
-async function handleChatRequest(request) {
-  try {
-    // Get message data from request body
-    const body = await request.json();
-
-    console.log('=== REQUEST BODY DEBUG ===');
-    console.log('Full body:', JSON.stringify(body, null, 2));
-    console.log('body.shop:', body.shop);
-    console.log('body.message:', body.message);
-    console.log('body.conversation_id:', body.conversation_id);
-    console.log('========================');
-
-    const userMessage = body.message;
-    const shop = body.shop;
-
-    // Validate required message
-    if (!userMessage) {
-      return new Response(
-        JSON.stringify({ error: AppConfig.errorMessages.missingMessage }),
-        { status: 400, headers: getSseHeaders(request) }
-      );
+    // Set up event handlers
+    if (streamHandlers.onText) {
+      stream.on('text', streamHandlers.onText);
     }
 
-    // Generate or use existing conversation ID
-    const conversationId = body.conversation_id || Date.now().toString();
-    const promptType = body.prompt_type || AppConfig.api.defaultPromptType;
-
-    // Create a stream for the response
-    const responseStream = createSseStream(async (stream) => {
-      await handleChatSession({
-        request,
-        userMessage,
-        conversationId,
-        promptType,
-        shop,
-        stream
-      });
-    });
-
-    return new Response(responseStream, {
-      headers: getSseHeaders(request)
-    });
-  } catch (error) {
-    console.error('Error in chat request handler:', error);
-    return json({
-      error: error.message || 'Internal server error'
-    }, {
-      status: 500,
-      headers: getCorsHeaders(request)
-    });
-  }
-}
-
-/**
- * Handle a complete chat session
- */
-async function handleChatSession({
-  request,
-  userMessage,
-  conversationId,
-  promptType,
-  shop,
-  stream
-}) {
-  // Initialize services
-  const claudeService = createClaudeService();
-  const toolService = createToolService();
-
-  // Use shop from parameter or fallback
-  if (!shop) {
-    shop = 'restorair.myshopify.com';
-    console.log('⚠️  No shop parameter, using hardcoded fallback:', shop);
-  } else {
-    console.log('✓ Using shop from request:', shop);
-  }
-
-  const hostUrl = `https://${shop}`;
-
-  // Initialize MCP client
-  let mcpClient;
-  let availableTools = [];
-  let useFallbackTools = false;
-
-  try {
-    console.log(`Initializing MCP client for shop: ${shop}`);
-    mcpClient = new MCPClient(hostUrl, conversationId, shop, null);
-
-    // Try to connect to both MCP servers
-    try {
-      const storefrontTools = await mcpClient.connectToStorefrontServer();
-      console.log(`✓ Connected to storefront MCP, got ${storefrontTools.length} tools`);
-      if (storefrontTools.length > 0) {
-        console.log('Storefront tools:', storefrontTools.map(t => t.name).join(', '));
-      }
-    } catch (e) {
-      console.warn("✗ Could not connect to storefront MCP server:", e.message);
-      useFallbackTools = true;
+    if (streamHandlers.onMessage) {
+      stream.on('message', streamHandlers.onMessage);
     }
 
-    try {
-      const customerTools = await mcpClient.connectToCustomerServer();
-      console.log(`✓ Connected to customer MCP, got ${customerTools.length} tools`);
-      if (customerTools.length > 0) {
-        console.log('Customer tools:', customerTools.map(t => t.name).join(', '));
-      }
-    } catch (e) {
-      console.warn("✗ Could not connect to customer MCP server:", e.message);
+    if (streamHandlers.onContentBlock) {
+      stream.on('contentBlock', streamHandlers.onContentBlock);
     }
 
-    availableTools = mcpClient.tools;
+    // Wait for final message
+    const finalMessage = await stream.finalMessage();
 
-    // If MCP has no tools, use fallback
-    if (availableTools.length === 0) {
-      console.log('🔄 No MCP tools available, enabling fallback');
-      useFallbackTools = true;
-      availableTools = [{
-        name: "search_shop_catalog",
-        description: "Search the store's product catalog. Use this when customers ask about available products, pricing, or features.",
-        input_schema: {
-          type: "object",
-          properties: {
-            query: {
-              type: "string",
-              description: "Search query for products"
-            }
-          },
-          required: ["query"]
+    // Process tool use requests
+    if (streamHandlers.onToolUse && finalMessage.content) {
+      for (const content of finalMessage.content) {
+        if (content.type === "tool_use") {
+          await streamHandlers.onToolUse(content);
         }
-      }];
-    }
-
-    console.log(`📦 Total tools available: ${availableTools.length}`);
-  } catch (error) {
-    console.error("❌ Error initializing MCP client:", error);
-    useFallbackTools = true;
-    availableTools = [{
-      name: "search_shop_catalog",
-      description: "Search the store's product catalog.",
-      input_schema: {
-        type: "object",
-        properties: {
-          query: { type: "string", description: "Search query" }
-        },
-        required: ["query"]
-      }
-    }];
-  }
-
-  try {
-    // Send conversation ID to client
-    stream.sendMessage({ type: 'id', conversation_id: conversationId });
-
-    // Save user message to the database
-    await saveMessage(conversationId, 'user', userMessage);
-
-    // Fetch all messages from the database for this conversation
-    const dbMessages = await getConversationHistory(conversationId);
-
-    // Remove duplicate consecutive messages
-    const deduplicatedMessages = [];
-    for (let i = 0; i < dbMessages.length; i++) {
-      const current = dbMessages[i];
-      const previous = dbMessages[i - 1];
-
-      if (!previous || current.content !== previous.content || current.role !== previous.role) {
-        deduplicatedMessages.push(current);
       }
     }
 
-    // Format messages for Claude API
-    const conversationHistory = deduplicatedMessages.map(dbMessage => {
-      let content;
-      try {
-        content = JSON.parse(dbMessage.content);
-      } catch (e) {
-        content = dbMessage.content;
-      }
-      return {
-        role: dbMessage.role,
-        content
-      };
-    });
+    return finalMessage;
+  };
 
-    // Products to display (if any tool returns products)
-    const productsToDisplay = [];
-
-    // Track if we need to continue the conversation after tool use
-    let needsContinuation = false;
-
-    // Execute the conversation stream - may need multiple iterations for tool use
-    do {
-      needsContinuation = false;
-
-      await claudeService.streamConversation(
-        {
-          messages: conversationHistory,
-          promptType,
-          tools: availableTools.length > 0 ? availableTools : undefined
-        },
-        {
-          // Handle text chunks
-          onText: (textDelta) => {
-            stream.sendMessage({
-              type: 'chunk',
-              chunk: textDelta
-            });
-          },
-
-          // Handle complete messages
-          onMessage: (message) => {
-            console.log('Message complete, stop reason:', message.stop_reason);
-
-            conversationHistory.push({
-              role: message.role,
-              content: message.content
-            });
-
-            saveMessage(conversationId, message.role, JSON.stringify(message.content))
-              .catch((error) => {
-                console.error("Error saving message to database:", error);
-              });
-
-            // Send products if any were found
-            if (productsToDisplay.length > 0) {
-              console.log(`Sending ${productsToDisplay.length} products to frontend`);
-              stream.sendMessage({
-                type: 'products',
-                products: productsToDisplay
-              });
-              // Clear products array after sending
-              productsToDisplay.length = 0;
-            }
-
-            // Send a completion message
-            stream.sendMessage({ type: 'message_complete' });
-          },
-
-          // Handle tool use (if tools are enabled)
-          onToolUse: async (toolUse) => {
-            console.log('Tool use requested:', toolUse.name);
-
-            stream.sendMessage({
-              type: 'tool_use',
-              tool_name: toolUse.name,
-              tool_input: toolUse.input
-            });
-
-            // Execute the tool - use MCP or fallback
-            try {
-              let toolResult;
-
-              if (useFallbackTools && toolUse.name === 'search_shop_catalog') {
-                console.log('Using fallback product search');
-                toolResult = await searchProductsFallback(request, toolUse.input.query);
-              } else if (mcpClient) {
-                console.log('Using MCP client');
-                toolResult = await mcpClient.callTool(toolUse.name, toolUse.input);
-                console.log('MCP tool result:', JSON.stringify(toolResult).substring(0, 500));
-              } else {
-                throw new Error("No tool execution method available");
-              }
-
-              // Check if result has error
-              if (toolResult.error) {
-                await toolService.handleToolError(
-                  toolResult,
-                  toolUse.name,
-                  toolUse.id,
-                  conversationHistory,
-                  stream.sendMessage,
-                  conversationId
-                );
-              } else {
-                // Format the result for the conversation
-                const formattedResult = {
-                  content: [{
-                    type: "text",
-                    text: typeof toolResult.content === 'string'
-                      ? toolResult.content
-                      : JSON.stringify(toolResult.content || toolResult)
-                  }]
-                };
-
-                console.log('Formatted tool result:', JSON.stringify(formattedResult).substring(0, 300));
-
-                await toolService.handleToolSuccess(
-                  formattedResult,
-                  toolUse.name,
-                  toolUse.id,
-                  conversationHistory,
-                  productsToDisplay,
-                  conversationId
-                );
-
-                // Set flag to continue conversation after tool use
-                needsContinuation = true;
-              }
-            } catch (error) {
-              console.error('Tool execution error:', error);
-              await toolService.handleToolError(
-                { error: { type: 'execution_error', data: error.message } },
-                toolUse.name,
-                toolUse.id,
-                conversationHistory,
-                stream.sendMessage,
-                conversationId
-              );
-            }
-          }
-        }
-      );
-
-    } while (needsContinuation);
-
-    // Signal end of turn
-    stream.sendMessage({ type: 'end_turn' });
-
-  } catch (error) {
-    console.error('Error in chat session:', error);
-    stream.handleStreamingError(error);
-    throw error;
-  }
-}
-
-/**
- * Gets CORS headers for the response
- */
-function getCorsHeaders(request) {
-  const origin = request.headers.get("Origin") || "*";
-  const requestHeaders = request.headers.get("Access-Control-Request-Headers") || "Content-Type, Accept";
+  /**
+   * Gets the system prompt content for a given prompt type
+   * @param {string} promptType - The prompt type to retrieve
+   * @returns {string} The system prompt content
+   */
+  const getSystemPrompt = (promptType) => {
+    return systemPrompts.systemPrompts[promptType]?.content ||
+      systemPrompts.systemPrompts[AppConfig.api.defaultPromptType].content;
+  };
 
   return {
-    "Access-Control-Allow-Origin": origin,
-    "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
-    "Access-Control-Allow-Headers": requestHeaders,
-    "Access-Control-Allow-Credentials": "true",
-    "Access-Control-Max-Age": "86400"
+    streamConversation,
+    getSystemPrompt
   };
 }
 
-/**
- * Get SSE headers for the response
- */
-function getSseHeaders(request) {
-  const origin = request.headers.get("Origin") || "*";
-
-  return {
-    "Content-Type": "text/event-stream",
-    "Cache-Control": "no-cache",
-    "Connection": "keep-alive",
-    "Access-Control-Allow-Credentials": "true",
-    "Access-Control-Allow-Origin": origin,
-    "Access-Control-Allow-Methods": "GET,OPTIONS,POST",
-    "Access-Control-Allow-Headers": "X-CSRF-Token, X-Requested-With, Accept, Accept-Version, Content-Length, Content-MD5, Content-Type, Date, X-Api-Version"
-  };
-}
+export default {
+  createClaudeService
+};
