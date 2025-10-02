@@ -76,6 +76,7 @@ async function handleChatRequest(request) {
     // Get message data from request body
     const body = await request.json();
     const userMessage = body.message;
+    const shop = body.shop; // Get shop from request body
 
     // Validate required message
     if (!userMessage) {
@@ -96,6 +97,7 @@ async function handleChatRequest(request) {
         userMessage,
         conversationId,
         promptType,
+        shop, // Pass shop to session handler
         stream
       });
     });
@@ -323,6 +325,7 @@ async function handleChatSession({
               // Use MCP
               console.log('Using MCP client');
               toolResult = await mcpClient.callTool(toolUse.name, toolUse.input);
+              console.log('MCP tool result:', JSON.stringify(toolResult).substring(0, 500));
             } else {
               throw new Error("No tool execution method available");
             }
@@ -342,9 +345,13 @@ async function handleChatSession({
               const formattedResult = {
                 content: [{
                   type: "text",
-                  text: typeof toolResult === 'string' ? toolResult : JSON.stringify(toolResult)
+                  text: typeof toolResult.content === 'string'
+                    ? toolResult.content
+                    : JSON.stringify(toolResult.content || toolResult)
                 }]
               };
+
+              console.log('Formatted tool result for conversation:', JSON.stringify(formattedResult).substring(0, 300));
 
               await toolService.handleToolSuccess(
                 formattedResult,

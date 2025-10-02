@@ -476,8 +476,14 @@
         try {
           const promptType = window.shopChatConfig?.promptType || "standardAssistant";
 
+
           // Get the shop domain - this is critical for MCP to work!
+          console.log('window.Shopify:', window.Shopify);
+          console.log('window.location.hostname:', window.location.hostname);
+
           const shopDomain = window.Shopify?.shop || 'restorair.myshopify.com';
+          console.log('Using shop domain:', shopDomain);
+
 
           const requestBody = JSON.stringify({
             message: userMessage,
