@@ -134,8 +134,21 @@ async function handleChatSession({
   const url = new URL(request.url);
   let shop = url.searchParams.get('shop');
 
-  console.dir(URLSearchParams);
+  // Debug the full URL
+  console.log('Full URL:', request.url);
 
+  // Debug the parsed URL object
+  console.log('URL object:', url);
+
+  // Debug search params
+  console.log('Search params string:', url.search);
+  console.log('Shop param:', shop);
+
+  // Log all search parameters
+  console.log('All params:');
+  for (const [key, value] of url.searchParams.entries()) {
+    console.log(`  ${key} = ${value}`);
+  }
 
   // Temporary fallback for testing
   if (!shop) {
