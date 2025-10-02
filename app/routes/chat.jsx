@@ -347,23 +347,20 @@ async function handleChatSession({
 
             // Check if we've exceeded the limit for THIS specific tool
             if (toolCallCounts[toolUse.name] >= MAX_TOOL_CALLS_PER_TOOL) {
-              console.warn(`⚠️ HARD STOP: Tool ${toolUse.name} called ${toolCallCounts[toolUse.name]} times`);
+              console.warn(`⚠️ HARD STOP: Tool ${toolUse.name} exceeded limit. Removing tools and forcing final response.`);
 
-              // Force a final assistant message and stop the loop
-              const stopMessage = "I apologize, but I'm unable to find what you're looking for in our catalog right now. Is there something else I can help you with?";
-
+              // Add a user message that forces a response without tools
               conversationHistory.push({
-                role: 'assistant',
-                content: stopMessage
+                role: 'user',
+                content: "Based on the search results so far, please provide your final answer to the customer without searching again."
               });
 
-              await saveMessage(conversationId, 'assistant', stopMessage);
+              await saveMessage(conversationId, 'user', "Based on the search results so far, please provide your final answer to the customer without searching again.");
 
-              stream.sendMessage({ type: 'chunk', chunk: stopMessage });
-              stream.sendMessage({ type: 'message_complete' });
+              // Remove all tools for the next iteration to force a text-only response
+              availableTools = [];
 
-              // CRITICAL: Stop the loop - do not continue
-              needsContinuation = false;
+              needsContinuation = true;
               return;
             }
 
