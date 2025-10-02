@@ -314,19 +314,6 @@ async function handleChatSession({
         // Handle tool use (if tools are enabled)
         onToolUse: async (toolUse) => {
           console.log('Tool use requested:', toolUse.name);
-          console.log('assistantMessage present?', !!toolUse.assistantMessage);
-
-          // Add the assistant's tool call message to history first (required by OpenAI)
-          if (toolUse.assistantMessage) {
-            console.log('Adding assistant tool call message to history');
-            conversationHistory.push(toolUse.assistantMessage);
-            await saveMessage(conversationId, 'assistant', JSON.stringify(toolUse.assistantMessage))
-              .catch((error) => {
-                console.error("Error saving assistant tool call message:", error);
-              });
-          } else {
-            console.error('WARNING: No assistantMessage provided with toolUse!');
-          }
 
           stream.sendMessage({
             type: 'tool_use',
@@ -362,44 +349,26 @@ async function handleChatSession({
                 conversationId
               );
             } else {
-              // For OpenAI, tool results need to be added as messages with role "tool"
-              // Extract the actual content
-              let toolResultContent = '';
-              if (toolResult.content && Array.isArray(toolResult.content)) {
-                toolResultContent = toolResult.content[0]?.text || JSON.stringify(toolResult);
-              } else {
-                toolResultContent = JSON.stringify(toolResult);
-              }
+              // Format the result for the conversation
+              const formattedResult = {
+                content: [{
+                  type: "text",
+                  text: typeof toolResult.content === 'string'
+                    ? toolResult.content
+                    : JSON.stringify(toolResult.content || toolResult)
+                }]
+              };
 
-              console.log('Tool result content length:', toolResultContent.length);
+              console.log('Formatted tool result for conversation:', JSON.stringify(formattedResult).substring(0, 300));
 
-              // Add tool result to conversation in OpenAI format
-              conversationHistory.push({
-                role: "tool",
-                tool_call_id: toolUse.id,
-                content: toolResultContent
-              });
-
-              // Save to database
-              await saveMessage(conversationId, 'tool', JSON.stringify({
-                tool_call_id: toolUse.id,
-                content: toolResultContent
-              })).catch((error) => {
-                console.error("Error saving tool result to database:", error);
-              });
-
-              // Process products if this was a product search
-              if (toolUse.name === 'search_shop_catalog') {
-                try {
-                  const resultData = JSON.parse(toolResultContent);
-                  if (resultData.products && Array.isArray(resultData.products)) {
-                    console.log(`Found ${resultData.products.length} products in tool result`);
-                    productsToDisplay.push(...resultData.products.slice(0, AppConfig.tools.maxProductsToDisplay));
-                  }
-                } catch (e) {
-                  console.error('Error parsing product data:', e);
-                }
-              }
+              await toolService.handleToolSuccess(
+                formattedResult,
+                toolUse.name,
+                toolUse.id,
+                conversationHistory,
+                productsToDisplay,
+                conversationId
+              );
 
               // Set flag to continue conversation after tool use
               needsContinuation = true;

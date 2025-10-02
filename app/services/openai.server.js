@@ -63,10 +63,19 @@ function convertToOpenAIFormat(messages) {
 
       // Handle tool result messages
       if (msg.role === 'tool') {
+        // Tool messages might be stored as {tool_call_id, content} object
+        if (typeof msg.content === 'object' && msg.content.tool_call_id && msg.content.content) {
+          return {
+            role: msg.role,
+            tool_call_id: msg.content.tool_call_id,
+            content: msg.content.content
+          };
+        }
+        // Or they might already be properly formatted
         return {
           role: msg.role,
           tool_call_id: msg.tool_call_id,
-          content: msg.content
+          content: typeof msg.content === 'string' ? msg.content : JSON.stringify(msg.content)
         };
       }
 
