@@ -133,7 +133,7 @@ async function handleChatSession({
   userMessage,
   conversationId,
   promptType,
-  shop, // Get shop from parameter
+  shop,
   stream
 }) {
   // Initialize services
@@ -258,137 +258,220 @@ async function handleChatSession({
     // Products to display (if any tool returns products)
     const productsToDisplay = [];
 
-    // Track if we need to continue the conversation after tool use
-    let needsContinuation = false;
+    // Track tool usage to prevent infinite loops
+    const MAX_TOOL_ITERATIONS = 3;
+    let toolIterationCount = 0;
+    const usedToolCalls = new Set(); // Track tool+input combinations
 
     // Execute the conversation stream - may need multiple iterations for tool use
+    let needsContinuation = false;
+
     do {
       needsContinuation = false;
 
+      // Safety check: prevent infinite loops
+      if (toolIterationCount >= MAX_TOOL_ITERATIONS) {
+        console.warn(`⚠️  Reached maximum tool iterations (${MAX_TOOL_ITERATIONS}), stopping loop`);
+
+        // Add a helpful message to the conversation
+        conversationHistory.push({
+          role: 'assistant',
+          content: "I apologize, but I'm having trouble finding what you're looking for in our catalog. Could you try rephrasing your question or asking about something else I can help with?"
+        });
+
+        // Save the message
+        await saveMessage(
+          conversationId,
+          'assistant',
+          "I apologize, but I'm having trouble finding what you're looking for in our catalog. Could you try rephrasing your question or asking about something else I can help with?"
+        );
+
+        // Send it to the client
+        stream.sendMessage({
+          type: 'chunk',
+          chunk: "I apologize, but I'm having trouble finding what you're looking for in our catalog. Could you try rephrasing your question or asking about something else I can help with?"
+        });
+
+        stream.sendMessage({ type: 'message_complete' });
+        break;
+      }
+
       await openaiService.streamConversation(
-      {
-        messages: conversationHistory,
-        promptType,
-        tools: availableTools.length > 0 ? availableTools : undefined
-      },
-      {
-        // Handle text chunks
-        onText: (textDelta) => {
-          stream.sendMessage({
-            type: 'chunk',
-            chunk: textDelta
-          });
+        {
+          messages: conversationHistory,
+          promptType,
+          tools: availableTools.length > 0 ? availableTools : undefined
         },
-
-        // Handle complete messages
-        onMessage: (message) => {
-          // Log the message content for debugging
-          console.log('Message complete, content length:',
-            typeof message.content === 'string' ? message.content.length : 'not a string');
-
-          conversationHistory.push({
-            role: message.role,
-            content: message.content
-          });
-
-          saveMessage(conversationId, message.role, JSON.stringify(message.content))
-            .catch((error) => {
-              console.error("Error saving message to database:", error);
-            });
-
-          // Send products if any were found
-          if (productsToDisplay.length > 0) {
-            console.log(`Sending ${productsToDisplay.length} products to frontend`);
+        {
+          // Handle text chunks
+          onText: (textDelta) => {
             stream.sendMessage({
-              type: 'products',
-              products: productsToDisplay
+              type: 'chunk',
+              chunk: textDelta
             });
-            // Clear products array after sending
-            productsToDisplay.length = 0;
-          }
+          },
 
-          // Send a completion message
-          stream.sendMessage({ type: 'message_complete' });
-        },
+          // Handle complete messages
+          onMessage: (message) => {
+            console.log('Message complete, content length:',
+              typeof message.content === 'string' ? message.content.length : 'not a string');
 
-        // Handle tool use (if tools are enabled)
-        onToolUse: async (toolUse) => {
-          console.log('Tool use requested:', toolUse.name);
+            conversationHistory.push({
+              role: message.role,
+              content: message.content
+            });
 
-          stream.sendMessage({
-            type: 'tool_use',
-            tool_name: toolUse.name,
-            tool_input: toolUse.input
-          });
+            saveMessage(conversationId, message.role, JSON.stringify(message.content))
+              .catch((error) => {
+                console.error("Error saving message to database:", error);
+              });
 
-          // Execute the tool - use MCP or fallback
-          try {
-            let toolResult;
-
-            if (useFallbackTools && toolUse.name === 'search_shop_catalog') {
-              // Use fallback GraphQL search with request auth
-              console.log('Using fallback product search with session auth');
-              toolResult = await searchProductsFallback(request, toolUse.input.query);
-            } else if (mcpClient) {
-              // Use MCP
-              console.log('Using MCP client');
-              toolResult = await mcpClient.callTool(toolUse.name, toolUse.input);
-              console.log('MCP tool result:', JSON.stringify(toolResult).substring(0, 500));
-            } else {
-              throw new Error("No tool execution method available");
+            // Send products if any were found
+            if (productsToDisplay.length > 0) {
+              console.log(`Sending ${productsToDisplay.length} products to frontend`);
+              stream.sendMessage({
+                type: 'products',
+                products: productsToDisplay
+              });
+              // Clear products array after sending
+              productsToDisplay.length = 0;
             }
 
-            // Check if result has error
-            if (toolResult.error) {
+            // Send a completion message
+            stream.sendMessage({ type: 'message_complete' });
+          },
+
+          // Handle tool use (if tools are enabled)
+          onToolUse: async (toolUse) => {
+            console.log('Tool use requested:', toolUse.name);
+
+            // Create a unique key for this tool call
+            const toolCallKey = `${toolUse.name}:${JSON.stringify(toolUse.input)}`;
+
+            // Check if we've already made this exact tool call
+            if (usedToolCalls.has(toolCallKey)) {
+              console.warn(`⚠️  Duplicate tool call detected: ${toolCallKey}`);
+
+              // Add a message indicating no results and preventing retry
+              const noResultMessage = {
+                role: 'user',
+                content: [{
+                  type: "tool_result",
+                  tool_use_id: toolUse.id,
+                  content: JSON.stringify({
+                    products: [],
+                    message: "This search was already performed with no results. Please inform the customer that this item is not available and offer to help with something else. Do NOT attempt to search again."
+                  })
+                }]
+              };
+
+              conversationHistory.push(noResultMessage);
+              await saveMessage(conversationId, 'user', JSON.stringify(noResultMessage.content));
+              needsContinuation = true;
+              return;
+            }
+
+            // Track this tool call
+            usedToolCalls.add(toolCallKey);
+            toolIterationCount++;
+
+            stream.sendMessage({
+              type: 'tool_use',
+              tool_name: toolUse.name,
+              tool_input: toolUse.input
+            });
+
+            // Execute the tool - use MCP or fallback
+            try {
+              let toolResult;
+
+              if (useFallbackTools && toolUse.name === 'search_shop_catalog') {
+                console.log('Using fallback product search with session auth');
+                toolResult = await searchProductsFallback(request, toolUse.input.query);
+              } else if (mcpClient) {
+                console.log('Using MCP client');
+                toolResult = await mcpClient.callTool(toolUse.name, toolUse.input);
+                console.log('MCP tool result:', JSON.stringify(toolResult).substring(0, 500));
+              } else {
+                throw new Error("No tool execution method available");
+              }
+
+              // Check if result has error
+              if (toolResult.error) {
+                await toolService.handleToolError(
+                  toolResult,
+                  toolUse.name,
+                  toolUse.id,
+                  conversationHistory,
+                  stream.sendMessage,
+                  conversationId
+                );
+              } else {
+                // Format the result for the conversation
+                let formattedResult = {
+                  content: [{
+                    type: "text",
+                    text: typeof toolResult.content === 'string'
+                      ? toolResult.content
+                      : JSON.stringify(toolResult.content || toolResult)
+                  }]
+                };
+
+                // Check if this is an empty product search result
+                if (toolUse.name === 'search_shop_catalog') {
+                  try {
+                    const resultText = formattedResult.content[0].text;
+                    const parsedResult = typeof resultText === 'string' ? JSON.parse(resultText) : resultText;
+
+                    if (parsedResult.products && parsedResult.products.length === 0) {
+                      console.log('⚠️  Empty product search result detected');
+
+                      // Add explicit instruction to not search again
+                      formattedResult = {
+                        content: [{
+                          type: "text",
+                          text: JSON.stringify({
+                            ...parsedResult,
+                            instructions: "No products were found. IMPORTANT: Do NOT attempt to search again. Politely inform the customer that this item is not currently available in our catalog and offer to help them with something else."
+                          })
+                        }]
+                      };
+                    }
+                  } catch (e) {
+                    console.error('Error parsing product result:', e);
+                  }
+                }
+
+                console.log('Formatted tool result for conversation:', JSON.stringify(formattedResult).substring(0, 300));
+
+                await toolService.handleToolSuccess(
+                  formattedResult,
+                  toolUse.name,
+                  toolUse.id,
+                  conversationHistory,
+                  productsToDisplay,
+                  conversationId
+                );
+
+                // Set flag to continue conversation after tool use
+                needsContinuation = true;
+              }
+            } catch (error) {
+              console.error('Tool execution error:', error);
               await toolService.handleToolError(
-                toolResult,
+                { error: { type: 'execution_error', data: error.message } },
                 toolUse.name,
                 toolUse.id,
                 conversationHistory,
                 stream.sendMessage,
                 conversationId
               );
-            } else {
-              // Format the result for the conversation
-              const formattedResult = {
-                content: [{
-                  type: "text",
-                  text: typeof toolResult.content === 'string'
-                    ? toolResult.content
-                    : JSON.stringify(toolResult.content || toolResult)
-                }]
-              };
-
-              console.log('Formatted tool result for conversation:', JSON.stringify(formattedResult).substring(0, 300));
-
-              await toolService.handleToolSuccess(
-                formattedResult,
-                toolUse.name,
-                toolUse.id,
-                conversationHistory,
-                productsToDisplay,
-                conversationId
-              );
-
-              // Set flag to continue conversation after tool use
-              needsContinuation = true;
             }
-          } catch (error) {
-            console.error('Tool execution error:', error);
-            await toolService.handleToolError(
-              { error: { type: 'execution_error', data: error.message } },
-              toolUse.name,
-              toolUse.id,
-              conversationHistory,
-              stream.sendMessage,
-              conversationId
-            );
           }
         }
-      }
-    );
+      );
 
-    } while (needsContinuation); // Continue if tools were used
+    } while (needsContinuation && toolIterationCount < MAX_TOOL_ITERATIONS);
 
     // Signal end of turn
     stream.sendMessage({ type: 'end_turn' });
@@ -399,7 +482,6 @@ async function handleChatSession({
     throw error;
   }
 }
-
 /**
  * Gets CORS headers for the response
  */

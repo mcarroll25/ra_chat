@@ -39,14 +39,34 @@ export function createToolService() {
    * @param {Array} productsToDisplay - Array to add product results to
    * @param {string} conversationId - The conversation ID
    */
-  const handleToolSuccess = async (toolUseResponse, toolName, toolUseId, conversationHistory, productsToDisplay, conversationId) => {
-    // Check if this is a product search result
-    if (toolName === AppConfig.tools.productSearchName) {
-      productsToDisplay.push(...processProductSearchResult(toolUseResponse));
-    }
+    const handleToolSuccess = async (toolUseResponse, toolName, toolUseId, conversationHistory, productsToDisplay, conversationId) => {
+      let toolResult = toolUseResponse.content;
 
-    addToolResultToHistory(conversationHistory, toolUseId, toolUseResponse.content, conversationId);
-  };
+      // Check if this is an empty product search
+      if (toolName === AppConfig.tools.productSearchName) {
+        try {
+          const content = toolUseResponse.content[0].text;
+          const responseData = typeof content === 'object' ? content : JSON.parse(content);
+
+          if (responseData?.products && responseData.products.length === 0) {
+            // Add explicit instruction to not search again
+            toolResult = [{
+              type: "text",
+              text: JSON.stringify({
+                ...responseData,
+                instructions: "No products found. Do NOT search again. Politely inform the customer this item is not available and ask if they need help with anything else."
+              })
+            }];
+          } else {
+            productsToDisplay.push(...processProductSearchResult(toolUseResponse));
+          }
+        } catch (e) {
+          console.error("Error processing product search:", e);
+        }
+      }
+
+      addToolResultToHistory(conversationHistory, toolUseId, toolResult, conversationId);
+    };
 
   /**
    * Processes product search results
