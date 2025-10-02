@@ -134,6 +134,9 @@ async function handleChatSession({
   const url = new URL(request.url);
   let shop = url.searchParams.get('shop');
 
+  console.dir(URLSearchParams);
+
+
   // Temporary fallback for testing
   if (!shop) {
     shop = 'restorair.myshopify.com'; // TEMPORARY: Remove after finding frontend code
