@@ -259,37 +259,32 @@ async function handleChatSession({
     const productsToDisplay = [];
 
     // Track tool usage to prevent infinite loops
-    const MAX_TOOL_ITERATIONS = 3;
-    let toolIterationCount = 0;
-    const usedToolCalls = new Set(); // Track tool+input combinations
-
-    // Execute the conversation stream - may need multiple iterations for tool use
+    const MAX_TOOL_CALLS_PER_TOOL = 2;
+    const MAX_TOTAL_TOOL_CALLS = 5;
+    const toolCallCounts = {};
+    let totalToolCalls = 0;
     let needsContinuation = false;
 
+    // Execute the conversation stream - may need multiple iterations for tool use
     do {
       needsContinuation = false;
 
       // Safety check: prevent infinite loops
-      if (toolIterationCount >= MAX_TOOL_ITERATIONS) {
-        console.warn(`⚠️  Reached maximum tool iterations (${MAX_TOOL_ITERATIONS}), stopping loop`);
+      if (totalToolCalls >= MAX_TOTAL_TOOL_CALLS) {
+        console.warn(`⚠️  Reached maximum total tool calls (${MAX_TOTAL_TOOL_CALLS}), stopping loop`);
 
-        // Add a helpful message to the conversation
+        const fallbackMessage = "I apologize, but I'm having trouble finding what you're looking for in our catalog. Could you try rephrasing your question or asking about something else I can help with?";
+
         conversationHistory.push({
           role: 'assistant',
-          content: "I apologize, but I'm having trouble finding what you're looking for in our catalog. Could you try rephrasing your question or asking about something else I can help with?"
+          content: fallbackMessage
         });
 
-        // Save the message
-        await saveMessage(
-          conversationId,
-          'assistant',
-          "I apologize, but I'm having trouble finding what you're looking for in our catalog. Could you try rephrasing your question or asking about something else I can help with?"
-        );
+        await saveMessage(conversationId, 'assistant', fallbackMessage);
 
-        // Send it to the client
         stream.sendMessage({
           type: 'chunk',
-          chunk: "I apologize, but I'm having trouble finding what you're looking for in our catalog. Could you try rephrasing your question or asking about something else I can help with?"
+          chunk: fallbackMessage
         });
 
         stream.sendMessage({ type: 'message_complete' });
@@ -341,7 +336,6 @@ async function handleChatSession({
             stream.sendMessage({ type: 'message_complete' });
           },
 
-          // Handle tool use (if tools are enabled)
           // Handle tool use (if tools are enabled)
           onToolUse: async (toolUse) => {
             console.log(`Tool use requested: ${toolUse.name} (total calls so far: ${totalToolCalls})`);
@@ -408,7 +402,7 @@ async function handleChatSession({
                   conversationId
                 );
               } else {
-                // === ORIGINAL FORMATTING LOGIC - DON'T CHANGE ===
+                // Original formatting logic
                 const formattedResult = {
                   content: [{
                     type: "text",
@@ -446,7 +440,7 @@ async function handleChatSession({
         }
       );
 
-    } while (needsContinuation && toolIterationCount < MAX_TOOL_ITERATIONS);
+    } while (needsContinuation && totalToolCalls < MAX_TOTAL_TOOL_CALLS);
 
     // Signal end of turn
     stream.sendMessage({ type: 'end_turn' });
@@ -457,6 +451,7 @@ async function handleChatSession({
     throw error;
   }
 }
+
 /**
  * Gets CORS headers for the response
  */
