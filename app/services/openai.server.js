@@ -120,6 +120,11 @@ export function createOpenAIService(apiKey = process.env.OPENAI_API_KEY) {
       ...convertedMessages
     ];
 
+    console.log('Messages being sent to OpenAI:', openAIMessages.length);
+    console.log('Message roles:', openAIMessages.map(m => m.role).join(', '));
+    // Log last 3 messages for debugging
+    console.log('Last 3 messages:', JSON.stringify(openAIMessages.slice(-3), null, 2).substring(0, 500));
+
     let fullContent = "";
     let finalMessage = null;
     let toolCallsBuffer = {}; // Buffer for accumulating tool call arguments
