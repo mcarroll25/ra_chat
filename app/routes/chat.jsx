@@ -342,38 +342,41 @@ async function handleChatSession({
           },
 
           // Handle tool use (if tools are enabled)
+          // Handle tool use (if tools are enabled)
           onToolUse: async (toolUse) => {
-            console.log('Tool use requested:', toolUse.name);
+            console.log(`Tool use requested: ${toolUse.name} (total calls so far: ${totalToolCalls})`);
 
-            // Create a unique key for this tool call
-            const toolCallKey = `${toolUse.name}:${JSON.stringify(toolUse.input)}`;
+            // Track calls per tool
+            if (!toolCallCounts[toolUse.name]) {
+              toolCallCounts[toolUse.name] = 0;
+            }
 
-            // Check if we've already made this exact tool call
-            if (usedToolCalls.has(toolCallKey)) {
-              console.warn(`⚠️  Duplicate tool call detected: ${toolCallKey}`);
+            // Check if we've exceeded the limit for THIS specific tool
+            if (toolCallCounts[toolUse.name] >= MAX_TOOL_CALLS_PER_TOOL) {
+              console.warn(`⚠️  Tool ${toolUse.name} has been called ${toolCallCounts[toolUse.name]} times already. Blocking further calls.`);
 
-              // Add a message indicating no results and preventing retry
-              const noResultMessage = {
+              const noRetryMessage = {
                 role: 'user',
                 content: [{
                   type: "tool_result",
                   tool_use_id: toolUse.id,
                   content: JSON.stringify({
-                    products: [],
-                    message: "This search was already performed with no results. Please inform the customer that this item is not available and offer to help with something else. Do NOT attempt to search again."
+                    error: "Maximum search attempts reached",
+                    message: "You have already searched multiple times with no results. STOP searching and inform the customer that we don't currently carry this item."
                   })
                 }]
               };
 
-              conversationHistory.push(noResultMessage);
-              await saveMessage(conversationId, 'user', JSON.stringify(noResultMessage.content));
+              conversationHistory.push(noRetryMessage);
+              await saveMessage(conversationId, 'user', JSON.stringify(noRetryMessage.content));
               needsContinuation = true;
               return;
             }
 
-            // Track this tool call
-            usedToolCalls.add(toolCallKey);
-            toolIterationCount++;
+            toolCallCounts[toolUse.name]++;
+            totalToolCalls++;
+
+            console.log(`Tool call count for ${toolUse.name}: ${toolCallCounts[toolUse.name]}/${MAX_TOOL_CALLS_PER_TOOL}`);
 
             stream.sendMessage({
               type: 'tool_use',
@@ -381,7 +384,6 @@ async function handleChatSession({
               tool_input: toolUse.input
             });
 
-            // Execute the tool - use MCP or fallback
             try {
               let toolResult;
 
@@ -396,7 +398,6 @@ async function handleChatSession({
                 throw new Error("No tool execution method available");
               }
 
-              // Check if result has error
               if (toolResult.error) {
                 await toolService.handleToolError(
                   toolResult,
@@ -407,8 +408,8 @@ async function handleChatSession({
                   conversationId
                 );
               } else {
-                // Format the result for the conversation
-                let formattedResult = {
+                // === ORIGINAL FORMATTING LOGIC - DON'T CHANGE ===
+                const formattedResult = {
                   content: [{
                     type: "text",
                     text: typeof toolResult.content === 'string'
@@ -416,31 +417,6 @@ async function handleChatSession({
                       : JSON.stringify(toolResult.content || toolResult)
                   }]
                 };
-
-                // Check if this is an empty product search result
-                if (toolUse.name === 'search_shop_catalog') {
-                  try {
-                    const resultText = formattedResult.content[0].text;
-                    const parsedResult = typeof resultText === 'string' ? JSON.parse(resultText) : resultText;
-
-                    if (parsedResult.products && parsedResult.products.length === 0) {
-                      console.log('⚠️  Empty product search result detected');
-
-                      // Add explicit instruction to not search again
-                      formattedResult = {
-                        content: [{
-                          type: "text",
-                          text: JSON.stringify({
-                            ...parsedResult,
-                            instructions: "No products were found. IMPORTANT: Do NOT attempt to search again. Politely inform the customer that this item is not currently available in our catalog and offer to help them with something else."
-                          })
-                        }]
-                      };
-                    }
-                  } catch (e) {
-                    console.error('Error parsing product result:', e);
-                  }
-                }
 
                 console.log('Formatted tool result for conversation:', JSON.stringify(formattedResult).substring(0, 300));
 
@@ -453,7 +429,6 @@ async function handleChatSession({
                   conversationId
                 );
 
-                // Set flag to continue conversation after tool use
                 needsContinuation = true;
               }
             } catch (error) {
