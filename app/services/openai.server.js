@@ -52,6 +52,24 @@ function convertToOpenAIFormat(messages) {
       return true;
     })
     .map(msg => {
+      // Handle assistant messages with tool_calls (content can be null)
+      if (msg.role === 'assistant' && msg.tool_calls) {
+        return {
+          role: msg.role,
+          content: msg.content,
+          tool_calls: msg.tool_calls
+        };
+      }
+
+      // Handle tool result messages
+      if (msg.role === 'tool') {
+        return {
+          role: msg.role,
+          tool_call_id: msg.tool_call_id,
+          content: msg.content
+        };
+      }
+
       if (Array.isArray(msg.content)) {
         const textBlocks = msg.content.filter(block =>
           block.type === 'text' &&
@@ -81,7 +99,14 @@ function convertToOpenAIFormat(messages) {
         content: content
       };
     })
-    .filter(msg => msg.content && msg.content.length > 0);
+    .filter(msg => {
+      // Keep tool messages and assistant messages with tool_calls even if content is empty
+      if (msg.role === 'tool' || (msg.role === 'assistant' && msg.tool_calls)) {
+        return true;
+      }
+      // For other messages, require non-empty content
+      return msg.content && msg.content.length > 0;
+    });
 }
 
 /**
