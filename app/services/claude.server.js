@@ -86,13 +86,12 @@ export function createClaudeService(apiKey = process.env.CLAUDE_API_KEY) {
  */
   const getSystemPrompt = (promptType) => {
     try {
-      // In Remix, we need to go up from services directory to app, then to prompts
-      const promptPath = join(__dirname, '..', 'prompts', `${promptType}.txt`);
+      // Use promptType directly since filename matches
+      const promptPath = join(process.cwd(), 'app', 'prompts', `${promptType}.txt`);
       console.log('Looking for prompt at:', promptPath);
       return readFileSync(promptPath, 'utf8');
     } catch (error) {
       console.warn(`Prompt file not found for ${promptType}:`, error.message);
-      // Fallback to JSON
       return systemPrompts.systemPrompts[promptType]?.content ||
         systemPrompts.systemPrompts[AppConfig.api.defaultPromptType].content;
     }
