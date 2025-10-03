@@ -6,8 +6,8 @@ import { Anthropic } from "@anthropic-ai/sdk";
 import AppConfig from "./config.server";
 import systemPrompts from "../prompts/prompts.json";
 import { readFileSync } from 'fs';
-import { join } from 'path';
-
+import { fileURLToPath } from 'url';
+import { dirname, join } from 'path';
 /**
  * Creates a Claude service instance
  * @param {string} apiKey - Claude API key
@@ -74,19 +74,20 @@ export function createClaudeService(apiKey = process.env.CLAUDE_API_KEY) {
     return finalMessage;
   };
 
-    /**
-   * Gets the system prompt content for a given prompt type
-   * @param {string} promptType - The prompt type to retrieve
-   * @returns {string} The system prompt content
-   */
+  /**
+ * Gets the system prompt content for a given prompt type
+ * @param {string} promptType - The prompt type to retrieve
+ * @returns {string} The system prompt content
+ */
   const getSystemPrompt = (promptType) => {
     try {
-      // Try to load from text file first
-      const promptPath = join(process.cwd(), 'app', 'prompts', `${promptType}.txt`);
+      // In Remix, we need to go up from services directory to app, then to prompts
+      const promptPath = join(__dirname, '..', 'prompts', `${promptType}.txt`);
+      console.log('Looking for prompt at:', promptPath);
       return readFileSync(promptPath, 'utf8');
     } catch (error) {
-      // Fallback to JSON if file doesn't exist
-      console.warn(`Prompt file not found for ${promptType}, falling back to JSON`);
+      console.warn(`Prompt file not found for ${promptType}:`, error.message);
+      // Fallback to JSON
       return systemPrompts.systemPrompts[promptType]?.content ||
         systemPrompts.systemPrompts[AppConfig.api.defaultPromptType].content;
     }
