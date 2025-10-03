@@ -611,22 +611,43 @@
       transform: scale(1);
     }
   }
+/* Header buttons container */
+.shop-ai-header-buttons {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
 
-  .shop-ai-header-buttons {
-    display: flex;
-    gap: 10px;
-    align-items: center;
-  }
+/* Clear chat button - minimal style to match existing design */
+.shop-ai-clear-chat {
+  background: none;
+  border: none;
+  font-size: 18px;
+  cursor: pointer;
+  padding: 0;
+  opacity: 0.85;
+  transition: opacity 0.2s;
+  line-height: 1;
+  color: white;
+}
 
-  .shop-ai-clear-chat {
-    background: none;
-    border: none;
-    font-size: 18px;
-    cursor: pointer;
-    opacity: 0.7;
-    transition: opacity 0.2s;
-  }
+.shop-ai-clear-chat:hover {
+  opacity: 1;
+}
 
-  .shop-ai-clear-chat:hover {
-    opacity: 1;
-  }
+/* Ensure close button matches if it doesn't already */
+.shop-ai-chat-close {
+  background: none;
+  border: none;
+  font-size: 22px;
+  cursor: pointer;
+  padding: 0;
+  opacity: 0.85;
+  transition: opacity 0.2s;
+  line-height: 1;
+  color: white;
+}
+
+.shop-ai-chat-close:hover {
+  opacity: 1;
+}

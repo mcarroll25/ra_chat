@@ -240,8 +240,11 @@ async function handleChatSession({
       }
     }
 
+    // Limit to last 20 messages to avoid token limits
+    const recentMessages = deduplicatedMessages.slice(-20);
+
     // Format messages for Claude API
-    const conversationHistory = deduplicatedMessages.map(dbMessage => {
+    const conversationHistory = recentMessage.map(dbMessage => {
       let content;
       try {
         content = JSON.parse(dbMessage.content);
