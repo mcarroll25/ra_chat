@@ -5,6 +5,8 @@
 import { Anthropic } from "@anthropic-ai/sdk";
 import AppConfig from "./config.server";
 import systemPrompts from "../prompts/prompts.json";
+import { readFileSync } from 'fs';
+import { join } from 'path';
 
 /**
  * Creates a Claude service instance
@@ -72,14 +74,22 @@ export function createClaudeService(apiKey = process.env.CLAUDE_API_KEY) {
     return finalMessage;
   };
 
-  /**
+    /**
    * Gets the system prompt content for a given prompt type
    * @param {string} promptType - The prompt type to retrieve
    * @returns {string} The system prompt content
    */
   const getSystemPrompt = (promptType) => {
-    return systemPrompts.systemPrompts[promptType]?.content ||
-      systemPrompts.systemPrompts[AppConfig.api.defaultPromptType].content;
+    try {
+      // Try to load from text file first
+      const promptPath = join(process.cwd(), 'app', 'prompts', `${promptType}.txt`);
+      return readFileSync(promptPath, 'utf8');
+    } catch (error) {
+      // Fallback to JSON if file doesn't exist
+      console.warn(`Prompt file not found for ${promptType}, falling back to JSON`);
+      return systemPrompts.systemPrompts[promptType]?.content ||
+        systemPrompts.systemPrompts[AppConfig.api.defaultPromptType].content;
+    }
   };
 
   return {
