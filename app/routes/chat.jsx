@@ -244,7 +244,7 @@ async function handleChatSession({
     const recentMessages = deduplicatedMessages.slice(-20);
 
     // Format messages for Claude API
-    const conversationHistory = recentMessage.map(dbMessage => {
+    const conversationHistory = recentMessages.map(dbMessage => {
       let content;
       try {
         content = JSON.parse(dbMessage.content);
